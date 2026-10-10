@@ -80,6 +80,34 @@ docker run \
     ghcr.io/erasmusmc-bioinformatics/molclass:latest
 ```
 
+## Previously classified (EMC / LUMC)
+
+Shows if a variant has already been classified at the EMC and/or LUMC, and how.
+The classifications are read from a sqlite database, set the `INHOUSE_DATABASE` environment variable to its path (default: `databases/inhouse.db`), for example with Docker:
+
+```
+docker run \
+    -p 8080:8080 \
+    -v /host/path/to/inhouse.db:/databases/inhouse.db \
+    -e INHOUSE_DATABASE=/databases/inhouse.db \
+    ghcr.io/erasmusmc-bioinformatics/molclass:latest
+```
+
+The database can be replaced while Molclass is running, the new one is used from the next search on.
+The card shows the date the database was made.
+
+Variants are stored and compared by their hg19 genomic position (chr, pos, ref, alt), because not every center reports a transcript, or the same one.
+A searched `transcript:cdot` is converted to hg19 with Mutalyzer or Ensembl VEP, the result is shown in the log.
+Deletions and insertions are left aligned on the reference sequence (from Ensembl) before they are compared, so it doesn't matter where in a repeat a center reports them.
+
+The database has three tables, see `inhouse_db.py` for the notation of pos, ref and alt:
+
+| Table | Columns |
+|---|---|
+| `metadata` | `key`, `value`, with the date the database was made (`2026-10-10`) under the key `built` |
+| `centers` | `name`, `source_file`, `variants` |
+| `classifications` | `center`, `gene`, `chr`, `pos`, `ref`, `alt`, `classification`, with an index on (`chr`, `pos`) |
+
 ## Disabling sources
 
 Specific sources can be disabled by setting the `DISABLED_SOURCES` environment variable as a comma-separated list.
