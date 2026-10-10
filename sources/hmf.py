@@ -1,6 +1,5 @@
 import os
 
-import aiofiles
 from jinja2 import BaseLoader, Environment
 from pydantic_settings import BaseSettings
 from util import reverse_complement
@@ -26,6 +25,10 @@ SUMMARY_TABLE_TEMPLATE = """
         <td>HMF WGS cohort</td>
         <td class='table-{{ 'success' if "hartwig_cohort" in sources else 'danger' }}'>{{ 'Yes' if "hartwig_cohort" in sources else 'No' }}</td>
     </tr>
+    <tr>
+        <td>HMF curated</td>
+        <td class='table-{{ 'success' if "hartwig_curated" in sources else 'danger' }}'>{{ 'Yes' if "hartwig_curated" in sources else 'No' }}</td>
+    </tr>
 </table>
 """
 
@@ -33,9 +36,34 @@ class Secrets(BaseSettings):
     hmf_database: str = "databases/hmf_hotspots.tsv"
 
 secrets = Secrets()
+
+# (mtime, {(chr, pos, ref, alt): (gene, ensembl, pdot, sources)}), so the database is only read again when it changes
+_hotspots: tuple[float, dict] = (0, {})
+
+
+def get_hotspots() -> dict:
+    """
+    Returns the HMF database as {(chr, pos, ref, alt): (gene, ensembl, pdot, sources)}
+    """
+    global _hotspots
+    mtime = os.path.getmtime(secrets.hmf_database)
+    if _hotspots[0] != mtime:
+        hotspots = {}
+        with open(secrets.hmf_database) as f:
+            for line in f:
+                columns = line.rstrip("\n").split("\t")
+                if len(columns) < 8:
+                    continue
+                chrom, pos, ref, alt, gene, ensembl, pdot, sources = columns[:8]
+                hotspots[(chrom, pos, ref, alt)] = (gene, ensembl, pdot, sources.strip())
+        _hotspots = (mtime, hotspots)
+    return _hotspots[1]
+
+
 class HMF(Source):
     def set_entries(self):
         self.entries = {
+            ("transcript", "cdot"): self.transcript_cdot,
             ("chr", "pos", "ref", "alt"): self.chr_pos_ref_alt,
         }
 
@@ -45,44 +73,59 @@ class HMF(Source):
             return False
         return True
 
+    async def transcript_cdot(self):
+        """
+        The HMF database is on the forward strand of hg19, so use the genomic coordinates of the transcript:cdot
+        """
+        resolved = await self.resolve_coordinates()
+        if resolved is None:
+            return  # chr_pos_ref_alt can still be tried when another source has the position
+
+        self.report(self.lookup_variant(resolved.chr, resolved.pos, resolved.ref, resolved.alt))
+        self.complete = True
+
     async def chr_pos_ref_alt(self):
         """
-        Mostly just calls lookup_variant()
+        For searches by position, and when the transcript:cdot could not be mapped.
+        In the last case ref/alt are the bases of the cdot, so the reverse complement is tried too.
         """
         chrom = self.variant["chr"]
         pos = self.variant["pos"]
         ref = self.variant["ref"]
         alt = self.variant["alt"]
+
+        info = self.lookup_variant(chrom, pos, ref, alt)
+        if not info and ref and alt:
+            info = self.lookup_variant(chrom, pos, reverse_complement(ref), reverse_complement(alt))
+        self.report(info)
+
+    def report(self, info):
+        """
+        Adds the meta data of the hotspot and shows which sources of the HMF database have it
+        """
         sources = set()
-        template = Environment(loader=BaseLoader()).from_string(SUMMARY_TABLE_TEMPLATE)
-        if info := await self.lookup_variant(chrom, pos, ref, alt):
-            gene = info[0]
-            ensembl = info[1]
-            pdot = info[2]
-            sources = set(info[3].split(","))
-            
+        if info:
+            gene, ensembl, pdot, sources = info
+            sources = set(sources.split(","))
+
             if gene != "null":
                 self.new_variant_data["gene"] = gene
             if ensembl != "null":
                 self.new_variant_data["ensembl_transcript"] = ensembl
-            self.new_variant_data["pdot"] = pdot
+            if pdot not in ("null", "-"):
+                self.new_variant_data["pdot"] = pdot
 
+        template = Environment(loader=BaseLoader()).from_string(SUMMARY_TABLE_TEMPLATE)
         self.html_text = template.render(sources=sources)
-    
-    async def lookup_variant(self, chrom, pos, ref, alt):
+
+    def lookup_variant(self, chrom, pos, ref, alt):
         """
-        Searches through the HMF database for the variant based on position
+        Searches the HMF database for the variant, returns (gene, ensembl, pdot, sources) or None
         """
         chrom = str(chrom)
-        pos = str(pos)
-        async with aiofiles.open('databases/hmf_hotspots.tsv', mode='r') as f:
-            async for line in f:
-                chrom_other, pos_other, ref_other, alt_other, gene, ensembl, pdot, sources = line.split("\t")
-                if (chrom, pos) != (chrom_other, pos_other):
-                    continue
-
-                if (ref, alt) == (ref_other, alt_other) or (ref and alt and reverse_complement(ref), reverse_complement(alt)) == (ref_other, alt_other):
-                    return (gene, ensembl, pdot, sources.strip())
+        if chrom.lower().startswith("chr"):
+            chrom = chrom[3:]
+        return get_hotspots().get((chrom, str(pos), ref, alt))
 
     def get_name(self):
         return "HMF Hotspots Database"
