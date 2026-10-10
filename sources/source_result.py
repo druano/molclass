@@ -8,6 +8,7 @@ from icecream import ic
 
 ic.configureOutput(prefix="debug-", includeContext=True)
 
+import coordinates
 from templates import templates
 
 
@@ -246,6 +247,26 @@ class Source:
         except asyncio.TimeoutError:
             self.timeout = True
             raise TimeoutError()
+
+    async def resolve_coordinates(self, build: str = "GRCh37") -> coordinates.Coordinates | None:
+        """
+        Returns the genomic coordinates of the transcript:cdot of the variant, None if they can't be determined.
+        They are also added to the meta data: gdot, g_chr, g_pos, g_ref and g_alt (gdot38, g38_chr, ... for GRCh38).
+        Unlike ref/alt, which are the bases of the cdot, these are always on the forward strand.
+        """
+        hgvs = f"{self.variant['transcript']}:{self.variant['cdot']}"
+        resolved = await coordinates.resolve(self.session, hgvs, build)
+        if resolved is None:
+            self.log_warning(f"Could not map {hgvs} to {build} (Mutalyzer and Ensembl VEP both failed)")
+            return None
+
+        suffix = "" if build == "GRCh37" else "38"
+        self.new_variant_data[f"gdot{suffix}"] = resolved.gdot
+        self.new_variant_data[f"g{suffix}_chr"] = resolved.chr
+        self.new_variant_data[f"g{suffix}_pos"] = resolved.pos
+        self.new_variant_data[f"g{suffix}_ref"] = resolved.ref
+        self.new_variant_data[f"g{suffix}_alt"] = resolved.alt
+        return resolved
 
     def get_name(self):
         """str(self)"""

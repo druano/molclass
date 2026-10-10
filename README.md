@@ -97,7 +97,7 @@ The database can be replaced while Molclass is running, the new one is used from
 The card shows the date the database was made.
 
 Variants are stored and compared by their hg19 genomic position (chr, pos, ref, alt), because not every center reports a transcript, or the same one.
-A searched `transcript:cdot` is converted to hg19 with Mutalyzer or Ensembl VEP, the result is shown in the log.
+A searched `transcript:cdot` is converted to hg19 with Mutalyzer or Ensembl VEP (see [Genomic coordinates](#genomic-coordinates)).
 Deletions and insertions are left aligned on the reference sequence (from Ensembl) before they are compared, so it doesn't matter where in a repeat a center reports them.
 
 The database has three tables, see `inhouse_db.py` for the notation of pos, ref and alt:
@@ -169,6 +169,15 @@ It adds the `transcript` (`NM_004958.4`) and `cdot` (`c.7500T>G`) to the meta da
 In the second iteration Molclass can now call `Clingen` with the `transcript`/`cdot` values it got from the first iteration.
 
 The third iteration Molclass will see that there are no more sources left, and end the iteration.
+
+### Genomic coordinates
+
+Sources that need the genomic position of a `transcript:cdot` should not look it up themselves, but call `await self.resolve_coordinates()` (optionally with `build="GRCh38"`).
+This uses Mutalyzer, and Ensembl VEP for what Mutalyzer can't map, and returns the chromosome, position, ref and alt as in a vcf, on the forward strand.
+A variant is only looked up once, also when several sources ask for it in the same iteration, and the result is cached.
+
+The result is also added to the meta data as `gdot`, `g_chr`, `g_pos`, `g_ref` and `g_alt` (`gdot38`, `g38_chr`, ... for GRCh38), `gdot` is shown on the Genome Nexus card.
+The older `ref` and `alt` meta data are the bases of the cdot, so for a gene on the reverse strand they are not the genomic bases.
 
 ## Uvicorn start
 
