@@ -65,5 +65,4 @@ class CKB(Source):
         if "pdot" in self.variant:
             pdot = get_pdot_abbreviation(self.variant["pdot"])
             pdot = pdot[2:]  # cut off 'p.'
-            pdot = pdot.replace("*", r"\*")  # escape '*'
             self.html_text = f"Manually search for {pdot} on gene page!"
