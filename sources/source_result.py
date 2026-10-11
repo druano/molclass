@@ -12,6 +12,10 @@ import coordinates
 from templates import templates
 
 
+# the look of a card that is only there for some variants, so it is noticed when it is
+HIGHLIGHT = "border-warning border-2 bg-warning bg-opacity-10"
+
+
 class SourceURL:
     """
     Convenience class to style the urls on the source cards on the client webpage
@@ -53,6 +57,7 @@ class Source:
     html_subtitle (str): An optional subtitle to the source card on the client.
     html_text (str): The body of the source card on the client.
     html_links (Dict): A dict of SourceURLs that will be added to the footer of the source card on the client.
+    html_class (str): Extra css classes for the source card, HIGHLIGHT for a card that should be noticed.
     shared_links (Dict): A dict of SourceURLs that will be added to the Links card on the client, the text should say where it goes. The key is the name used in links_order in the config.
     """
 
@@ -75,6 +80,7 @@ class Source:
         self.html_subtitle: str = ""
         self.html_text: str = ""
         self.html_links = {}
+        self.html_class: str = ""
         self.shared_links = {}
         self.set_entries()
         self.name: str = self.get_name()

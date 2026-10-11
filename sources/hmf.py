@@ -67,6 +67,9 @@ class HMF(Source):
             ("chr", "pos", "ref", "alt"): self.chr_pos_ref_alt,
         }
 
+    def is_optional(self) -> bool:
+        return True
+
     def is_complete(self) -> bool:
         if not os.path.exists(secrets.hmf_database):
             print("Could not find HMF hotspot database:", secrets.hmf_database)
@@ -79,6 +82,7 @@ class HMF(Source):
         """
         resolved = await self.resolve_coordinates()
         if resolved is None:
+            self.hidden = True
             return  # chr_pos_ref_alt can still be tried when another source has the position
 
         self.report(self.lookup_variant(resolved.chr, resolved.pos, resolved.ref, resolved.alt))
@@ -103,6 +107,12 @@ class HMF(Source):
         """
         Adds the meta data of the hotspot and shows which sources of the HMF database have it
         """
+        if not info:
+            # most variants are not a hotspot, don't use space on the page for a table of 'No'
+            self.found = False
+            self.hidden = True
+            return
+
         sources = set()
         if info:
             gene, ensembl, pdot, sources = info

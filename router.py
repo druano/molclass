@@ -185,7 +185,7 @@ async def send_logs(logs, websocket: WebSocket):
 LINKS_TEMPLATE = """
 <div class="card h-100">
   <div class="card-body">
-    <div class="card-title h5">Links</div>
+    <div class="card-title h5">Extra links</div>
     <div class="card-text">
       {% for link in links %}{{ link|safe }} {% endfor %}
     </div>

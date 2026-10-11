@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     # these are shown on top of each other in one column, at the place of the first of them in sources
     stacked_sources: List[type] = [
         Alamut,
-        CKB,
         Franklin,
+        CKB,
     ]
 
     # the order of the links on the Links card: the names of the is_link()=True sources and of the shared links

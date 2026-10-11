@@ -394,14 +394,17 @@ class GenomeNexus(Source):
                 text += f"<p class='small mb-1'>{' &middot; '.join(dict.fromkeys(details))}</p>"
 
             pathogenicity = [line for line in (self.get_clinvar(annotation), await self.get_oncokb(annotation)) if line]
+            # a line between the sections: the position in the gene, the interpretation and how often it is found
             if pathogenicity:
-                text += f"<p class='small mb-1'>{'<br />'.join(pathogenicity)}</p>"
+                text += f"<p class='small mb-1 pt-1 border-top'>{'<br />'.join(pathogenicity)}</p>"
                 self.html_text = text
 
             # SIGNAL has the share of the patients per tumor type, that says more than the number of tumors
             # of the hotspot. So the tumor types of the hotspot are only drawn when SIGNAL doesn't have the variant.
             signal = self.get_signal(annotation, query)
-            text += await self.get_hotspot_section(annotation, summary, gene, with_chart=not signal) + signal
+            found = await self.get_hotspot_section(annotation, summary, gene, with_chart=not signal) + signal
+            if found:
+                text += f"<div class='pt-1 border-top'>{found}</div>"
             self.html_text = text
 
             cosmic = ((annotation.get("my_variant_info") or {}).get("annotation") or {}).get("cosmic") or {}

@@ -4,23 +4,11 @@ import yaml
 from jinja2 import BaseLoader, Environment
 from pydantic_settings import BaseSettings
 
-from .source_result import Source
+from .source_result import HIGHLIGHT, Source
 
 # this source is a banner over the full width of the page, so it has its own, compact, layout instead of the card
 TEMPLATE = """
-<div class='card'>
-    <div class='card-header py-1'>
-        {% if table.url %}
-            <a target='_blank' class='btn btn-primary btn-sm my-1' href='{{ table.url }}'>{{ name }}</a>
-        {% else %}
-            <span class='fw-bold'>{{ name }}</span>
-        {% endif %}
-        <small class='text-muted ms-2' title='{{ table.notes|join("\n") }}'>
-            Advies over kiembaandiagnostiek. Geldt alleen voor (waarschijnlijk) pathogene varianten,
-            bij TMB &lt; 20 mut/Mb en als de variant niet evident subklonaal is.
-            {% if gene.changed %}Tekst gewijzigd ten opzichte van de vorige versie.{% endif %}
-        </small>
-    </div>
+<div class='card {{ highlight }}'>
     <div class='card-body py-2'>
         {% if gene.remark %}<div class='small'>{{ gene.remark }}</div>{% endif %}
         <table class='table table-sm table-borderless mb-0 fs-6'>
@@ -33,6 +21,18 @@ TEMPLATE = """
                 <td class='text-break pb-0' style='white-space: pre-line'>{{ gene.mtb or '-' }}</td>
             </tr>
         </table>
+    </div>
+    <div class='card-footer py-1 bg-warning bg-opacity-25 border-warning'>
+        {% if table.url %}
+            <a target='_blank' class='btn btn-primary btn-sm my-1' href='{{ table.url }}'>{{ name }}</a>
+        {% else %}
+            <span class='fw-bold'>{{ name }}</span>
+        {% endif %}
+        <small class='text-muted ms-2' title='{{ table.notes|join("\n") }}'>
+            Advies over kiembaandiagnostiek. Geldt alleen voor (waarschijnlijk) pathogene varianten,
+            bij TMB &lt; 20 mut/Mb en als de variant niet evident subklonaal is.
+            {% if gene.changed %}Tekst gewijzigd ten opzichte van de vorige versie.{% endif %}
+        </small>
     </div>
 </div>
 """
@@ -61,6 +61,13 @@ def get_table() -> dict:
         table["genes"] = {str(gene).upper(): advice or {} for gene, advice in (table.get("genes") or {}).items()}
         _table = (mtime, table)
     return _table[1]
+
+
+def has_advice(gene: dict) -> bool:
+    """A gene can be in the table with 'Nee' and 'geen': a variant in it is never a reason for germline diagnostics"""
+    report = str(gene.get("report") or "").strip().lower()
+    mtb = str(gene.get("mtb") or "").strip().lower()
+    return report not in ("", "-", "nee") or mtb not in ("", "-", "geen", "nee")
 
 
 class Table3(Source):
@@ -106,15 +113,16 @@ class Table3(Source):
         gene = table["genes"].get(str(symbol).upper())
         self.complete = True
 
-        if gene is None:
-            # most genes are not in the table, don't use space on the page to say so
+        if gene is None or not has_advice(gene):
+            # most genes are not in the table, don't use space on the page to say so.
+            # The same for a gene that is in the table to say that there is no advice (EGFR)
             self.found = False
             self.hidden = True
             return
 
         name = f"Tabel 3 ({table['version']})" if table.get("version") else "Tabel 3"
         template = Environment(loader=BaseLoader(), autoescape=True).from_string(TEMPLATE)
-        self.html_text = template.render(table=table, gene=gene, name=name)
+        self.html_text = template.render(table=table, gene=gene, name=name, highlight=HIGHLIGHT)
 
     def get_html(self):
         """The banner instead of the card of the other sources"""

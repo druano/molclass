@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from jinja2 import Environment, BaseLoader
 
-from .source_result import Source, SourceURL
+from .source_result import HIGHLIGHT, Source, SourceURL
 
 SUMMARY_TABLE_TEMPLATE = """
 <table class='table'>
@@ -58,6 +58,8 @@ class TP53(Source):
             self.complete = True
             self.hidden = True
             return
+
+        self.html_class = HIGHLIGHT
 
         url = "https://tp53.cancer.gov/results_somatic_mutation_list"
 
