@@ -1,36 +1,19 @@
 import os
 
-from jinja2 import BaseLoader, Environment
+from markupsafe import escape
 from pydantic_settings import BaseSettings
 from util import reverse_complement
 
-from .source_result import Source
+from .source_result import Source, SourceURL
 
-SUMMARY_TABLE_TEMPLATE = """
-<table class='table caption-top fs-6'>
-    <caption>Sources</caption>
-    <tr>
-        <td>DoCM (<a href="http://www.docm.info/">http://www.docm.info/</a>)</td>
-        <td class='table-{{ 'success' if "docm" in sources else 'danger' }}'>{{ 'Yes' if "docm" in sources else 'No' }}</td>
-    </tr>
-    <tr>
-        <td>CIVIC (<a href="https://civicdb.org/">https://civicdb.org/</a>)</td>
-        <td class='table-{{ 'success' if "vicc_civic" in sources else 'danger' }}'>{{ 'Yes' if "vicc_civic" in sources else 'No' }}</td>
-    </tr>
-    <tr>
-        <td>CGI (Cancer Genome Interpreter)</td>
-        <td class='table-{{ 'success' if "vicc_cgi" in sources else 'danger' }}'>{{ 'Yes' if "vicc_cgi" in sources else 'No' }}</td>
-    </tr>
-    <tr>
-        <td>HMF WGS cohort</td>
-        <td class='table-{{ 'success' if "hartwig_cohort" in sources else 'danger' }}'>{{ 'Yes' if "hartwig_cohort" in sources else 'No' }}</td>
-    </tr>
-    <tr>
-        <td>HMF curated</td>
-        <td class='table-{{ 'success' if "hartwig_curated" in sources else 'danger' }}'>{{ 'Yes' if "hartwig_curated" in sources else 'No' }}</td>
-    </tr>
-</table>
-"""
+# the sources of the HMF database, with the name to show for them
+SOURCE_NAMES = {
+    "docm": "DoCM",
+    "vicc_civic": "CIViC",
+    "vicc_cgi": "CGI",
+    "hartwig_cohort": "HMF WGS cohort",
+    "hartwig_curated": "HMF curated",
+}
 
 class Secrets(BaseSettings):
     hmf_database: str = "databases/hmf_hotspots.tsv"
@@ -105,7 +88,8 @@ class HMF(Source):
 
     def report(self, info):
         """
-        Adds the meta data of the hotspot and shows which sources of the HMF database have it
+        Adds the meta data of the hotspot and shows which sources of the HMF database have it.
+        The sources that don't have it are not listed, the card is as small as possible
         """
         if not info:
             # most variants are not a hotspot, don't use space on the page for a table of 'No'
@@ -113,20 +97,26 @@ class HMF(Source):
             self.hidden = True
             return
 
-        sources = set()
-        if info:
-            gene, ensembl, pdot, sources = info
-            sources = set(sources.split(","))
+        gene, ensembl, pdot, sources = info
+        sources = set(sources.split(","))
 
-            if gene != "null":
-                self.new_variant_data["gene"] = gene
-            if ensembl != "null":
-                self.new_variant_data["ensembl_transcript"] = ensembl
-            if pdot not in ("null", "-"):
-                self.new_variant_data["pdot"] = pdot
+        if gene != "null":
+            self.new_variant_data["gene"] = gene
+        if ensembl != "null":
+            self.new_variant_data["ensembl_transcript"] = ensembl
+        if pdot not in ("null", "-"):
+            self.new_variant_data["pdot"] = pdot
 
-        template = Environment(loader=BaseLoader()).from_string(SUMMARY_TABLE_TEMPLATE)
-        self.html_text = template.render(sources=sources)
+        # the sources in the order of SOURCE_NAMES, followed by sources that are new in the database
+        names = [name for source, name in SOURCE_NAMES.items() if source in sources]
+        names += sorted(escape(source) for source in sources - set(SOURCE_NAMES) if source)
+        badges = " ".join(f"<span class='badge text-bg-success fw-normal'>{name}</span>" for name in names)
+        self.html_text = f"<span class='small'>Hotspot according to</span> {badges}"
+
+        # the name is at the bottom of the card, like the links of the other sources. There is nothing to link to
+        self.html_title = ""
+        label = f"<span class='btn btn-sm my-1 px-0 border-0 disabled text-muted text-start opacity-100'>{self.get_name()}</span>"
+        self.html_links["main"] = SourceURL("", "", override=label)
 
     def lookup_variant(self, chrom, pos, ref, alt):
         """

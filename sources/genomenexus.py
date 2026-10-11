@@ -8,10 +8,11 @@ from util import reverse_complement
 from .source_result import Source, SourceURL
 
 # the role of a gene in cancer, as shown on the Genome Nexus website. It comes from the OncoKB cancer gene list.
+# Each role is shown as a label: (text, style of the label)
 GENE_TYPES = {
-    "ONCOGENE": ("Oncogene", "text-danger"),
-    "TSG": ("Tumor suppressor gene", "text-primary"),
-    "ONCOGENE_AND_TSG": ("Oncogene and tumor suppressor gene", "text-danger"),
+    "ONCOGENE": [("Oncogene", "text-bg-danger")],
+    "TSG": [("Tumor suppressor gene", "text-bg-primary")],
+    "ONCOGENE_AND_TSG": [("Oncogene", "text-bg-danger"), ("Tumor suppressor gene", "text-bg-primary")],
 }
 
 # the colors of the protein domains, the same domain gets the same color
@@ -371,8 +372,8 @@ class GenomeNexus(Source):
 
             gene = summary.get("hugoGeneSymbol")
             if gene and (gene_type := await self.get_gene_type(gene)) in GENE_TYPES:
-                label, style = GENE_TYPES[gene_type]
-                text += f"<p class='h6 {style}'>{label}</p>"
+                labels = " ".join(f"<span class='badge {style} fs-6'>{label}</span>" for label, style in GENE_TYPES[gene_type])
+                text += f"<p class='mb-2'>{labels}</p>"
                 self.html_text = text
 
             # variants outside the coding sequence don't have a position in the protein
@@ -396,7 +397,7 @@ class GenomeNexus(Source):
             pathogenicity = [line for line in (self.get_clinvar(annotation), await self.get_oncokb(annotation)) if line]
             # a line between the sections: the position in the gene, the interpretation and how often it is found
             if pathogenicity:
-                text += f"<p class='small mb-1 pt-1 border-top'>{'<br />'.join(pathogenicity)}</p>"
+                text += f"<p class='small mt-2 mb-2 pt-2 border-top'>{'<br />'.join(pathogenicity)}</p>"
                 self.html_text = text
 
             # SIGNAL has the share of the patients per tumor type, that says more than the number of tumors
@@ -404,7 +405,7 @@ class GenomeNexus(Source):
             signal = self.get_signal(annotation, query)
             found = await self.get_hotspot_section(annotation, summary, gene, with_chart=not signal) + signal
             if found:
-                text += f"<div class='pt-1 border-top'>{found}</div>"
+                text += f"<div class='mt-2 pt-2 border-top'>{found}</div>"
             self.html_text = text
 
             cosmic = ((annotation.get("my_variant_info") or {}).get("annotation") or {}).get("cosmic") or {}

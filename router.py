@@ -47,6 +47,7 @@ def search(request: Request, search: str):
             "release_tag": settings.release_tag,
             "sources": (sources := [source({}, {}) for source in settings.sources]),
             "stacked_sources": [source for stacked in settings.stacked_sources for source in sources if type(source) is stacked],
+            "source_widths": settings.source_widths,
             # the Links card is shown at the place of the first source that is only a link
             "links_anchor": next((source for source in sources if source.is_link()), None),
             "websocket_url": websocket_url,

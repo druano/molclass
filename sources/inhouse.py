@@ -96,7 +96,7 @@ class InHouse(Source):
         name = f"{self.get_name()} (database of {built})" if built else self.get_name()
         self.html_title = ""
         # sized like the link buttons of the other sources, so the bottom of the cards in a row is the same height
-        label = f"<span class='btn btn-sm my-1 px-0 border-0 disabled text-muted opacity-100'>{escape(name)}</span>"
+        label = f"<span class='btn btn-sm my-1 px-0 border-0 disabled text-muted text-start opacity-100'>{escape(name)}</span>"
         self.html_links["main"] = SourceURL("", "", override=label)
 
         # only a deletion/insertion can be written in more than one way, and only those need the reference

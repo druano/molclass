@@ -151,7 +151,7 @@
                 {# the stacked sources share one column, they are all put at the place of the first of them #}
                 {% if not stack.shown %}
                     {% set stack.shown = true %}
-                    <div class="col">
+                    <div class="col col-md-{{ source_widths.get('stacked', 4) }}">
                         <div class="d-flex flex-column gap-4 h-100">
                             {% for stacked_source in stacked_sources %}
                                 {{ source_slot(stacked_source, "flex-fill") }}
@@ -160,7 +160,7 @@
                     </div>
                 {% endif %}
             {% else %}
-                {{ source_slot(source, "col") }}
+                {{ source_slot(source, "col col-md-" ~ source_widths.get(source.__class__.__name__, 4)) }}
             {% endif %}
         {% endfor %}
     </div>

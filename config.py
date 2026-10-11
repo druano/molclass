@@ -49,6 +49,14 @@ class Settings(BaseSettings):
         CKB,
     ]
 
+    # the width of a source on the page in twelfths of the page, a source that is not listed gets 4 (a third).
+    # 'stacked' is the column of the stacked sources
+    source_widths: dict = {
+        "GenomeNexus": 6,
+        "InHouse": 3,
+        "stacked": 3,
+    }
+
     # the order of the links on the Links card: the names of the is_link()=True sources and of the shared links
     links_order: List[str] = [
         "CKB",
