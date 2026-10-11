@@ -81,7 +81,7 @@
                     </div>
                 {% endif %}
             {% else %}
-                <div class="col {% if source.is_hidden() %}d-none{% endif %} {% if source.is_banner() %}w-100 d-none{% endif %}" id="{{ source.__class__.__name__ }}_div" {% if source.is_banner() %}data-banner{% endif %}>
+                <div class="col {% if source.is_hidden() or source.is_banner() or source.is_optional() %}d-none{% endif %} {% if source.is_banner() %}w-100{% endif %}" id="{{ source.__class__.__name__ }}_div" {% if source.is_banner() or source.is_optional() %}data-optional{% endif %}>
                     {{ loading_card(source) }}
                 </div>
             {% endif %}

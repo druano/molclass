@@ -95,6 +95,13 @@ class Source:
         """Can be used to hide a card on the client, useful for sources that are just there to increase consensus"""
         return False
 
+    def is_optional(self) -> bool:
+        """
+        An optional source only gets a card once it has a result, instead of a card that says it is loading.
+        For a source that has nothing to say about most variants, it should set hidden for those.
+        """
+        return False
+
     def is_banner(self) -> bool:
         """
         A banner is shown over the full width of the page instead of as a card, and only once it has a result.

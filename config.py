@@ -25,21 +25,21 @@ class Settings(BaseSettings):
         ClinVar,
         Franklin,
         CKB,
+        TP53,
         LOVD,
         OncoKB,
         cBioPortal,
         Varsome,
-        HMF,
         Mutalyzer,
         Mastermind,
         SpliceAI,
         BoostDM,
+        HMF,
         # is_hidden()=True sources should be at the end, to not leave gaps in source layout
         Clingen,
         Ensembl,
         # GnomAD,
         dbSNP,
-        TP53,
     ]
 
     # these are shown on top of each other in one column, at the place of the first of them in sources

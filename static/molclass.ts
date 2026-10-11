@@ -168,8 +168,8 @@ function updateSource(message: any): void {
     // a source can ask to be removed, when it has nothing to say about this variant
     if (message.hidden) {
         source_div.classList.add("d-none");
-    } else if (source_div.hasAttribute("data-banner") && message.data.trim() !== "") {
-        // a banner only takes up space when it has something to show
+    } else if (source_div.hasAttribute("data-optional") && message.data.trim() !== "") {
+        // a banner or optional source only takes up space when it has something to show
         source_div.classList.remove("d-none");
     }
     initTooltips(source_div);
