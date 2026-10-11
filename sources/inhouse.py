@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings
 import coordinates
 from inhouse_db import lookup, match, normalize_alleles, normalize_chr
 
-from .source_result import Source
+from .source_result import Source, SourceURL
 
 TEMPLATE = """
 <table class='table table-sm mb-0 fs-6'>
@@ -92,8 +92,12 @@ class InHouse(Source):
         self.log_info(f"Looking up {chrom}:{pos} {ref or '-'}>{alt or '-'} (hg19)")
 
         center_names, rows, built = lookup(secrets.inhouse_database, chrom, pos - WINDOW, pos + WINDOW)
-        if built:
-            self.html_subtitle = f"<small>database of {escape(built)}</small>"
+        # the name and the date of the database are at the bottom of the card, there is nothing to link to
+        name = f"{self.get_name()} (database of {built})" if built else self.get_name()
+        self.html_title = ""
+        # sized like the link buttons of the other sources, so the bottom of the cards in a row is the same height
+        label = f"<span class='btn btn-sm my-1 px-0 border-0 disabled text-muted opacity-100'>{escape(name)}</span>"
+        self.html_links["main"] = SourceURL("", "", override=label)
 
         # only a deletion/insertion can be written in more than one way, and only those need the reference
         sequence = None
