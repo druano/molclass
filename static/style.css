@@ -36,3 +36,9 @@
 .source-timeout {
     opacity: 0.5;
 }
+
+/* the genomic position at the top of the page has two lines (hg19 and hg38), keep its box as high as the others */
+#gdot_variant span {
+    font-size: 0.7em;
+    line-height: 1.1;
+}

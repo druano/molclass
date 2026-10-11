@@ -44,6 +44,7 @@ class Coordinates:
 
 
 _coordinates: dict[tuple, Coordinates] = {}
+_gdots: dict[tuple, str] = {}
 _references: dict[tuple, str] = {}
 _pending: dict[tuple, asyncio.Future] = {}
 
@@ -103,6 +104,18 @@ def gdot_from_vcf(chrom: str, pos: int, ref: str, alt: str) -> str:
     return f"{chrom}:g.{span}del" + (f"ins{alt}" if alt else "")
 
 
+async def _mutalyzer_gdot(session: aiohttp.ClientSession, hgvs: str, build: str) -> str | None:
+    """Returns the hgvs genomic notation (7:g.55242465_55242479del) according to Mutalyzer"""
+    enc_hgvs = urllib.parse.quote(hgvs, safe="")
+    url = f"https://mutalyzer.nl/api/map/?description={enc_hgvs}&reference_id={build.upper()}&filter_out=true"
+    mapped = await _get(session, url, MUTALYZER_TIMEOUT)
+    description = mapped.get("genomic_description") if isinstance(mapped, dict) else None
+    if description and (m := GENOMIC_DESCRIPTION_RE.fullmatch(description)):
+        chrom = ACCESSION_CHROMOSOMES.get(m.group("number"), m.group("number"))
+        return f"{chrom}:{m.group('gdot')}"
+    return None
+
+
 async def _resolve(session: aiohttp.ClientSession, hgvs: str, build: str) -> Coordinates | None:
     """
     Mutalyzer is fast and gives the hgvs genomic notation, but only has the bases for substitutions
@@ -110,15 +123,11 @@ async def _resolve(session: aiohttp.ClientSession, hgvs: str, build: str) -> Coo
     its vcf_string has the bases for deletions/insertions too.
     """
     enc_hgvs = urllib.parse.quote(hgvs, safe="")
-    gdot = None
 
-    url = f"https://mutalyzer.nl/api/map/?description={enc_hgvs}&reference_id={build.upper()}&filter_out=true"
-    mapped = await _get(session, url, MUTALYZER_TIMEOUT)
-    description = mapped.get("genomic_description") if isinstance(mapped, dict) else None
-    if description and (m := GENOMIC_DESCRIPTION_RE.fullmatch(description)):
-        chrom = ACCESSION_CHROMOSOMES.get(m.group("number"), m.group("number"))
-        gdot = f"{chrom}:{m.group('gdot')}"
-        if snv := GDOT_SNV_RE.fullmatch(m.group("gdot")):
+    gdot = await _mutalyzer_gdot(session, hgvs, build)
+    if gdot:
+        chrom, description = gdot.split(":", 1)
+        if snv := GDOT_SNV_RE.fullmatch(description):
             return Coordinates(build, chrom, int(snv.group("pos")), snv.group("ref"), snv.group("alt"), gdot)
 
     url = f"{ENSEMBL_URLS[build]}/vep/human/hgvs/{enc_hgvs}?vcf_string=1&content-type=application/json"
@@ -134,6 +143,24 @@ async def _resolve(session: aiohttp.ClientSession, hgvs: str, build: str) -> Coo
 async def resolve(session: aiohttp.ClientSession, hgvs: str, build: str = "GRCh37") -> Coordinates | None:
     """Returns the genomic coordinates of a transcript:cdot (NM_005228.5:c.2573T>G), None if they can't be determined"""
     return await _once(_coordinates, (hgvs, build), lambda: _resolve(session, hgvs, build))
+
+
+async def _resolve_gdot(session: aiohttp.ClientSession, hgvs: str, build: str) -> str | None:
+    if (hgvs, build) in _coordinates:
+        return _coordinates[(hgvs, build)].gdot
+    gdot = await _mutalyzer_gdot(session, hgvs, build)
+    if gdot is None:  # intronic for example, the full lookup knows what to do with those
+        resolved = await resolve(session, hgvs, build)
+        gdot = resolved.gdot if resolved else None
+    return gdot
+
+
+async def resolve_gdot(session: aiohttp.ClientSession, hgvs: str, build: str = "GRCh37") -> str | None:
+    """
+    Returns only the hgvs genomic notation of a transcript:cdot, for when the bases are not needed.
+    For a deletion/insertion this saves the (slow) request to Ensembl.
+    """
+    return await _once(_gdots, ("gdot", hgvs, build), lambda: _resolve_gdot(session, hgvs, build))
 
 
 async def _reference(session: aiohttp.ClientSession, chrom: str, start: int, end: int, build: str) -> str | None:

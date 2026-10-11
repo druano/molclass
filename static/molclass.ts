@@ -146,6 +146,16 @@ function updateVariant(message: any): void {
             }
         }
     }
+
+    // the genomic position is shown for both genome builds, in the same box
+    let gdot_elem = document.getElementById("gdot_variant");
+    if (gdot_elem && variant.has("gdot")) {
+        let positions = [`${variant.get("gdot")} (hg19)`];
+        if (variant.has("gdot38")) {
+            positions.push(`${variant.get("gdot38")} (hg38)`);
+        }
+        gdot_elem.innerHTML = `<span>${positions.join("<br />")}</span>`;
+    }
 }
 
 // handles updating the source cards
@@ -223,7 +233,7 @@ function updateNewSearch(elem: HTMLElement, key: string, value: string): void {
 function updateConsensus(message: any): void {
     let key_values: Object = message.data;
     
-    let consensusChecks = ["gene", "transcript", "cdot", "pdot"];
+    let consensusChecks = ["gene", "transcript", "cdot", "pdot", "gdot"];
 
     [].forEach.call(consensusChecks, function(check_key) {
         if (key_values.hasOwnProperty(check_key)){
@@ -231,7 +241,7 @@ function updateConsensus(message: any): void {
         }
     });
 
-    let includeSet = new Set(["transcript", "cdot", "pdot", "gene", "ref", "alt"]);
+    let includeSet = new Set(["transcript", "cdot", "pdot", "gene", "gdot", "ref", "alt"]);
 
     let variant_data_elem  = document.getElementById("variant-data-div");
     variant_data_elem.innerHTML = "";

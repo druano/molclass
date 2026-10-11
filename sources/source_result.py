@@ -268,6 +268,17 @@ class Source:
         self.new_variant_data[f"g{suffix}_alt"] = resolved.alt
         return resolved
 
+    async def resolve_gdot(self, build: str = "GRCh37") -> str | None:
+        """
+        Returns the hgvs genomic notation of the transcript:cdot of the variant, and adds it to the meta data
+        as gdot (gdot38 for GRCh38). Use this when the position and bases of resolve_coordinates() are not needed.
+        """
+        hgvs = f"{self.variant['transcript']}:{self.variant['cdot']}"
+        gdot = await coordinates.resolve_gdot(self.session, hgvs, build)
+        if gdot:
+            self.new_variant_data["gdot" if build == "GRCh37" else "gdot38"] = gdot
+        return gdot
+
     def get_name(self):
         """str(self)"""
         return f"{self}"

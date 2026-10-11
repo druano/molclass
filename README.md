@@ -176,7 +176,9 @@ Sources that need the genomic position of a `transcript:cdot` should not look it
 This uses Mutalyzer, and Ensembl VEP for what Mutalyzer can't map, and returns the chromosome, position, ref and alt as in a vcf, on the forward strand.
 A variant is only looked up once, also when several sources ask for it in the same iteration, and the result is cached.
 
-The result is also added to the meta data as `gdot`, `g_chr`, `g_pos`, `g_ref` and `g_alt` (`gdot38`, `g38_chr`, ... for GRCh38), `gdot` is shown on the Genome Nexus card.
+`await self.resolve_gdot()` only returns the hgvs genomic notation, which is faster for deletions and insertions.
+
+The result is also added to the meta data as `gdot`, `g_chr`, `g_pos`, `g_ref` and `g_alt` (`gdot38`, `g38_chr`, ... for GRCh38), `gdot` and `gdot38` are shown at the top of the page.
 The older `ref` and `alt` meta data are the bases of the cdot, so for a gene on the reverse strand they are not the genomic bases.
 
 ## Uvicorn start

@@ -34,6 +34,13 @@
                         </div>
                     </div>
                 </td>
+                <td>
+                    <div id="gdot_variant" class="d-flex justify-content-center h2 text-break" data-bs-toggle="modal" data-bs-target="#variantModal">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="sr-only"></span>
+                        </div>
+                    </div>
+                </td>
             </tr>
         </table>
     </div>
@@ -94,5 +101,5 @@
 
 {% endblock %}
 {% block js_import %}
-    <script src="{{ url_for('static', path='/molclass.js') }}"></script> 
+    <script src="{{ url_for('static', path='/molclass.js') }}?v={{ static_version }}"></script> 
 {% endblock %}
