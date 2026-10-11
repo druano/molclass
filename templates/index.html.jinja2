@@ -122,6 +122,28 @@
                     </div>
                 </div>
     {% endmacro %}
+    {% macro source_slot(source, classes) %}
+        {% if source.is_link() %}
+            {# the sources that are only a link share the Links card, it is put at the place of the first of them #}
+            {% if source == links_anchor %}
+                <div class="{{ classes }}" id="Links_div">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Links</h5>
+                            <h6 class="card-subtitle mb-2 text-muted">Loading...</h6>
+                            <div class="d-flex justify-content-center" data-source-loading="Links">
+                                <div class="spinner-border text-primary" role="status"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="{{ classes }} {% if source.is_hidden() or source.is_banner() or source.is_optional() %}d-none{% endif %} {% if source.is_banner() %}w-100{% endif %}" id="{{ source.__class__.__name__ }}_div" {% if source.is_banner() or source.is_optional() %}data-optional{% endif %}>
+                {{ loading_card(source) }}
+            </div>
+        {% endif %}
+    {% endmacro %}
     <div class="row row-cols-1 row-cols-md-3 g-4">
         {% set stack = namespace(shown=false) %}
         {% for source in sources %}
@@ -132,17 +154,13 @@
                     <div class="col">
                         <div class="d-flex flex-column gap-4 h-100">
                             {% for stacked_source in stacked_sources %}
-                                <div class="flex-fill {% if stacked_source.is_hidden() %}d-none{% endif %}" id="{{ stacked_source.__class__.__name__ }}_div">
-                                    {{ loading_card(stacked_source) }}
-                                </div>
+                                {{ source_slot(stacked_source, "flex-fill") }}
                             {% endfor %}
                         </div>
                     </div>
                 {% endif %}
             {% else %}
-                <div class="col {% if source.is_hidden() or source.is_banner() or source.is_optional() %}d-none{% endif %} {% if source.is_banner() %}w-100{% endif %}" id="{{ source.__class__.__name__ }}_div" {% if source.is_banner() or source.is_optional() %}data-optional{% endif %}>
-                    {{ loading_card(source) }}
-                </div>
+                {{ source_slot(source, "col") }}
             {% endif %}
         {% endfor %}
     </div>

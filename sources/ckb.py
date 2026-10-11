@@ -2,7 +2,6 @@ import re
 import time
 
 from pydantic_settings import BaseSettings
-from util import get_pdot_abbreviation
 
 from .source_result import Source, SourceURL
 
@@ -21,10 +20,12 @@ GENES_MAX_AGE = 24 * 60 * 60
 _genes: tuple[float, dict[str, str]] = (0, {})
 
 class CKB(Source):
+    def is_link(self) -> bool:
+        return True
+
     def set_entries(self):
         self.entries = {
             ("transcript", ): self.transcript,
-            ("gene", "pdot"): self.gene_pdot,
             ("gene", ): self.gene,
         }
 
@@ -61,23 +62,20 @@ class CKB(Source):
 
     async def transcript(self):
         """
-        Looks up the gene of the transcript, so the link is shown without waiting for another source to supply the gene.
-        This is not complete: the protein change to search for is added by gene_pdot() when the meta data has it.
+        Looks up the gene of the transcript, so the link is shown without waiting for another source to supply the gene
         """
         gene = await self.resolve_gene()
         if gene:
             await self.report(gene)
-
-    async def gene_pdot(self):
-        await self.report(self.variant["gene"])
-        self.complete = True
+            self.complete = True
 
     async def gene(self):
         await self.report(self.variant["gene"])
+        self.complete = True
 
     async def report(self, gene):
         """
-        Adds the url of the CKB page of the gene, and what to search for on that page
+        Adds the url of the CKB page of the gene
         """
         genes = await self.get_genes()
         if genes is None:
@@ -91,8 +89,3 @@ class CKB(Source):
             return
 
         self.html_links["main"] = SourceURL("Gene", url)
-
-        if self.variant.get("pdot"):
-            pdot = get_pdot_abbreviation(self.variant["pdot"])
-            pdot = pdot[2:]  # cut off 'p.'
-            self.html_text = f"Manually search for {pdot} on gene page!"

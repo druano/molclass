@@ -53,6 +53,7 @@ class Source:
     html_subtitle (str): An optional subtitle to the source card on the client.
     html_text (str): The body of the source card on the client.
     html_links (Dict): A dict of SourceURLs that will be added to the footer of the source card on the client.
+    shared_links (Dict): A dict of SourceURLs that will be added to the Links card on the client, the text should say where it goes. The key is the name used in links_order in the config.
     """
 
     def __init__(self, variant, consensus):
@@ -74,6 +75,7 @@ class Source:
         self.html_subtitle: str = ""
         self.html_text: str = ""
         self.html_links = {}
+        self.shared_links = {}
         self.set_entries()
         self.name: str = self.get_name()
         self.session: aiohttp.ClientSession
@@ -93,6 +95,13 @@ class Source:
 
     def is_hidden(self) -> bool:
         """Can be used to hide a card on the client, useful for sources that are just there to increase consensus"""
+        return False
+
+    def is_link(self) -> bool:
+        """
+        A source that only has links doesn't get a card of its own, its links are shown on the Links card,
+        with the name of the source as text. The place of the link is set with links_order in the config.
+        """
         return False
 
     def is_optional(self) -> bool:

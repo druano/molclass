@@ -14,7 +14,7 @@ ic.configureOutput(prefix="debug-", includeContext=True)
 
 from config import settings
 from search import parse_search, parse_transcript
-from sources.source_result import Source
+from sources.source_result import Source, SourceURL
 from templates import templates
 
 router = APIRouter(
@@ -47,6 +47,8 @@ def search(request: Request, search: str):
             "release_tag": settings.release_tag,
             "sources": (sources := [source({}, {}) for source in settings.sources]),
             "stacked_sources": [source for stacked in settings.stacked_sources for source in sources if type(source) is stacked],
+            # the Links card is shown at the place of the first source that is only a link
+            "links_anchor": next((source for source in sources if source.is_link()), None),
             "websocket_url": websocket_url,
         }
     )
@@ -180,10 +182,51 @@ async def send_logs(logs, websocket: WebSocket):
         "messages": logs
     })
 
-async def send_source(data: Source, websocket: WebSocket):
+LINKS_TEMPLATE = """
+<div class="card h-100">
+  <div class="card-body">
+    <div class="card-title h5">Links</div>
+    <div class="card-text">
+      {% for link in links %}{{ link|safe }} {% endfor %}
+    </div>
+  </div>
+</div>
+"""
+
+
+async def send_links(links: dict, websocket: WebSocket):
     """
-    Send a source update to the client through the websocket
+    Send the Links card to the client: the links of the sources that are only a link (is_link),
+    and the links other sources share, in the order of links_order in the config
     """
+    order = settings.links_order
+    buttons = []
+    for name in sorted(links, key=lambda name: order.index(name) if name in order else len(order)):
+        buttons += links[name]
+    html = templates.env.from_string(LINKS_TEMPLATE).render(links=buttons)
+    await websocket.send_json({"type": "update", "name": "Links", "data": html, "found": True, "hidden": False, "timeout": False})
+
+
+async def send_source(data: Source, websocket: WebSocket, links: dict):
+    """
+    Send a source update to the client through the websocket.
+    links has what is on the Links card for this search, it is sent again when this source changes it.
+    """
+    if data.is_link():
+        # the name of the source is the text of the link, sources say things like 'Go' or 'Gene'
+        buttons = []
+        for link in data.html_links.values() if data.found else []:
+            text = data.name if len(data.html_links) == 1 else f"{data.name}: {link.text}"
+            buttons.append(link.override or str(SourceURL(text, link.url)))
+        links[type(data).__name__] = buttons
+        await send_links(links, websocket)
+        return
+
+    if data.shared_links:
+        for name, link in data.shared_links.items():
+            links[name] = [str(link)]
+        await send_links(links, websocket)
+
     await websocket.send_json({
         "type": "update",
         "name": str(data),
@@ -232,6 +275,9 @@ async def websocket_endpoint(websocket: WebSocket, search: str, db_session: Sess
         # wrap the search query meta data in a read only dict
         search_variant = MappingProxyType(dict(**variant))
 
+        # what is on the Links card: {name of the source or shared link: [html, ...]}
+        links: dict = {}
+
         # holds the 'votes' for meta data values
         consensus_variant = {k: {v: ["search"]} for k, v in search_variant.items()}
 
@@ -261,7 +307,7 @@ async def websocket_endpoint(websocket: WebSocket, search: str, db_session: Sess
                     result = await source.execute(session)
                     if result and (result.executed or result.timeout):
                         async with send_lock:
-                            await send_source(result, websocket)
+                            await send_source(result, websocket, links)
                     return result
 
                 # gather all the current sources and prepare an asyncio task list
@@ -315,7 +361,7 @@ async def websocket_endpoint(websocket: WebSocket, search: str, db_session: Sess
             for source in source_results:
                 await send_logs(source.consume_logs(), websocket)
                 if source.executed or source.timeout:
-                    await send_source(source, websocket)
+                    await send_source(source, websocket, links)
                 if source.complete:
                     completed_sources.append(source)
                     sources.remove(source)

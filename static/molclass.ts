@@ -163,6 +163,9 @@ function updateVariant(message: any): void {
 function updateSource(message: any): void {
     let source_name = message.name;
     let source_div = document.getElementById(`${source_name}_div`);
+    if (!source_div) {
+        return;
+    }
 
     source_div.innerHTML = message.data;
     // a source can ask to be removed, when it has nothing to say about this variant

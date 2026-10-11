@@ -407,7 +407,7 @@ class GenomeNexus(Source):
             cosmic = ((annotation.get("my_variant_info") or {}).get("annotation") or {}).get("cosmic") or {}
             if isinstance(cosmic, dict) and cosmic.get("cosmicId"):
                 cosmic_id = urllib.parse.quote(str(cosmic["cosmicId"]))
-                self.html_links["cosmic"] = SourceURL(cosmic_id, f"https://cancer.sanger.ac.uk/cosmic/search?genome=37&q={cosmic_id}")
+                self.shared_links["COSMIC"] = SourceURL(f"COSMIC {cosmic_id}", f"https://cancer.sanger.ac.uk/cosmic/search?genome=37&q={cosmic_id}")
         except (TimeoutError, aiohttp.ClientError, KeyError, TypeError, ValueError):
             self.timeout = False
         self.html_text = text

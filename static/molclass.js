@@ -127,6 +127,9 @@ function updateVariant(message) {
 function updateSource(message) {
     var source_name = message.name;
     var source_div = document.getElementById(source_name + "_div");
+    if (!source_div) {
+        return;
+    }
     source_div.innerHTML = message.data;
     // a source can ask to be removed, when it has nothing to say about this variant
     if (message.hidden) {

@@ -49,6 +49,15 @@ class Settings(BaseSettings):
         Franklin,
     ]
 
+    # the order of the links on the Links card: the names of the is_link()=True sources and of the shared links
+    links_order: List[str] = [
+        "CKB",
+        "SpliceAI",
+        "cBioPortal",
+        "COSMIC",
+        "BoostDM",
+    ]
+
     def __init__(self):
         super().__init__()
         disabled_sources_list = self.disabled_sources.split(",")
