@@ -22,3 +22,4 @@ from .spliceai import SpliceAI
 from .boostdm import BoostDM
 from .genelists import GeneLists
 from .inhouse import InHouse
+from .table3 import Table3

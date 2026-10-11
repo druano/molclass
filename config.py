@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     sources: List[type] = [
         GenomeNexus,
         GeneLists,
+        Table3,
         InHouse,
         Alamut,
         COSMIC,

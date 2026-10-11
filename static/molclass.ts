@@ -165,6 +165,10 @@ function updateSource(message: any): void {
     let source_div = document.getElementById(`${source_name}_div`);
 
     source_div.innerHTML = message.data;
+    // a source can ask to be removed, when it has nothing to say about this variant
+    if (message.hidden) {
+        source_div.classList.add("d-none");
+    }
     initTooltips(source_div);
 }
 

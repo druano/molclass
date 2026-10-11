@@ -45,6 +45,7 @@ class Coordinates:
 
 _coordinates: dict[tuple, Coordinates] = {}
 _gdots: dict[tuple, str] = {}
+_genes: dict[tuple, str] = {}
 _references: dict[tuple, str] = {}
 _pending: dict[tuple, asyncio.Future] = {}
 
@@ -161,6 +162,24 @@ async def resolve_gdot(session: aiohttp.ClientSession, hgvs: str, build: str = "
     For a deletion/insertion this saves the (slow) request to Ensembl.
     """
     return await _once(_gdots, ("gdot", hgvs, build), lambda: _resolve_gdot(session, hgvs, build))
+
+
+async def _resolve_gene(session: aiohttp.ClientSession, accession: str) -> str | None:
+    url = f"https://mygene.info/v3/query?q=refseq:{urllib.parse.quote(accession)}&species=human&fields=symbol"
+    result = await _get(session, url, MUTALYZER_TIMEOUT)
+    hits = result.get("hits") if isinstance(result, dict) else None
+    if hits and isinstance(hits[0], dict):
+        return hits[0].get("symbol")
+    return None
+
+
+async def resolve_gene(session: aiohttp.ClientSession, transcript: str) -> str | None:
+    """
+    Returns the symbol of the gene of a refseq transcript (NM_005228.5), None if it can't be determined.
+    For sources that only need the gene: the gene of the meta data is only known after the first iteration.
+    """
+    accession = transcript.strip().split(".")[0].upper()
+    return await _once(_genes, ("gene", accession), lambda: _resolve_gene(session, accession))
 
 
 async def _reference(session: aiohttp.ClientSession, chrom: str, start: int, end: int, build: str) -> str | None:

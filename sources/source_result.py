@@ -43,6 +43,7 @@ class Source:
     error (bool): Indicates if an error occurred during this iteration.
     timeout (bool): Indicates if the source timed out.
     found (bool): Should be set to True if there was no result found in the source database.
+    hidden (bool): Set to True to remove the source card from the client, for a source that has nothing to say about this variant.
     entries (dict): Holds the 'entries', a ((key), func). See set_entries() for more info.
     new_variant_data (dict): Add new meta data to this.
     matches_consensus (bool): Indicates if this source matches with the consensus.
@@ -63,6 +64,7 @@ class Source:
         self.error: bool = False
         self.timeout: bool = False
         self.found: bool = True
+        self.hidden: bool = False
         self.entries: dict = {}
         self.new_variant_data = {}
         self.matches_consensus: bool = True
@@ -108,6 +110,7 @@ class Source:
         self.executed = False
         self.complete = False
         self.found = True
+        self.hidden = False
         self.error = False
         self.timeout = False
         self.matches_consensus = True
@@ -278,6 +281,13 @@ class Source:
         if gdot:
             self.new_variant_data["gdot" if build == "GRCh37" else "gdot38"] = gdot
         return gdot
+
+    async def resolve_gene(self) -> str | None:
+        """
+        Returns the gene of the transcript of the variant, None if it can't be determined.
+        Use this instead of waiting for the gene in the meta data, which another source has to supply first.
+        """
+        return await coordinates.resolve_gene(self.session, str(self.variant["transcript"]))
 
     def get_name(self):
         """str(self)"""

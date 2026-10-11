@@ -108,6 +108,40 @@ The database has three tables, see `inhouse_db.py` for the notation of pos, ref 
 | `centers` | `name`, `source_file`, `variants` |
 | `classifications` | `center`, `gene`, `chr`, `pos`, `ref`, `alt`, `classification`, with an index on (`chr`, `pos`) |
 
+## Tabel 3
+
+Shows the advice of "Tabel 3" of the NVVP, VKGL and VKGN for the gene: when a (likely) pathogenic variant found in a tumor is a reason to advise germline diagnostics, in the pathology report and in the MTB.
+The table is published as a pdf, so it has to be typed over into a YAML file:
+
+```yml
+version: april 2026
+url: "https://artsengenetica.nl/sites/default/files/Versie%20tabel%203%20maart%202026.pdf"
+columns:
+  report: Attenderen op mogelijke kiembaanvariant in PA-verslag indien sprake is van onderstaande tumor/beeld
+  mtb: Aanvullende redenen om te overwegen te verwijzen voor klinische genetische counseling
+notes:
+  - Alleen indien TMB < 20 mut/Mb.
+genes:
+  ATM:
+    report: Pancreas- of mammacarcinoom
+    mtb: Bij pancreas- of mammacarcinoom bij patiënt of bij 1e gr verwant
+  BRCA1:
+    report: Altijd
+  RET:
+    changed: true
+    remark: N.B. RET fusies zijn geen reden voor kiembaanonderzoek
+    report: |-
+      Codon 918 nooit
+      Codon 634 en 833 bij elk tumortype
+```
+
+`report` and `mtb` are the two columns of the table, `changed` marks a text that was changed since the previous version and `remark` is shown above the advice. The `columns` and `notes` are shown when hovering over the card.
+Set the `TABLE3_DATABASE` environment variable to the path of this file (default: `databases/table3.yml`), for example with Docker:
+
+```
+docker run     -p 8080:8080     -v ./table3.yml:/databases/table3.yml     -e TABLE3_DATABASE=/databases/table3.yml     ghcr.io/erasmusmc-bioinformatics/molclass:latest
+```
+
 ## Disabling sources
 
 Specific sources can be disabled by setting the `DISABLED_SOURCES` environment variable as a comma-separated list.
@@ -177,6 +211,8 @@ This uses Mutalyzer, and Ensembl VEP for what Mutalyzer can't map, and returns t
 A variant is only looked up once, also when several sources ask for it in the same iteration, and the result is cached.
 
 `await self.resolve_gdot()` only returns the hgvs genomic notation, which is faster for deletions and insertions.
+
+In the same way `await self.resolve_gene()` returns the gene of the searched transcript, for a source that only needs the gene and should not have to wait for another source to add it to the meta data.
 
 The result is also added to the meta data as `gdot`, `g_chr`, `g_pos`, `g_ref` and `g_alt` (`gdot38`, `g38_chr`, ... for GRCh38), `gdot` and `gdot38` are shown at the top of the page.
 The older `ref` and `alt` meta data are the bases of the cdot, so for a gene on the reverse strand they are not the genomic bases.

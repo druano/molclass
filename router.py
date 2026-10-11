@@ -187,6 +187,7 @@ async def send_source(data: Source, websocket: WebSocket):
         "name": str(data),
         "data": data.get_html(),
         "found": data.found,
+        "hidden": data.hidden,
         "timeout": data.timeout,
     })
 
@@ -250,10 +251,21 @@ async def websocket_endpoint(websocket: WebSocket, search: str, db_session: Sess
 
             # the ClientSession is used by all sources for requests, allowing for async/await
             async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+                # show a source as soon as it is done, instead of when the slowest source of the iteration is done.
+                # It is sent again at the end of the iteration, when it is known if it matches the consensus.
+                send_lock = asyncio.Lock()
+
+                async def execute_and_send(source: Source):
+                    result = await source.execute(session)
+                    if result and (result.executed or result.timeout):
+                        async with send_lock:
+                            await send_source(result, websocket)
+                    return result
+
                 # gather all the current sources and prepare an asyncio task list
                 tasks = []
                 for source in sources:
-                    tasks.append(asyncio.ensure_future(source.execute(session)))
+                    tasks.append(asyncio.ensure_future(execute_and_send(source)))
 
                 print(f"[DEBUG] Executing {len(tasks)} source tasks")
                 # asynchronously execute all the source tasks
