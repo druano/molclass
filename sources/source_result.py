@@ -95,6 +95,13 @@ class Source:
         """Can be used to hide a card on the client, useful for sources that are just there to increase consensus"""
         return False
 
+    def is_banner(self) -> bool:
+        """
+        A banner is shown over the full width of the page instead of as a card, and only once it has a result.
+        Put these sources at the start of the sources in the config, so they are above the cards.
+        """
+        return False
+
     def is_complete(self) -> bool:
         """
         Can be used to check if a source has everything needed to get results.

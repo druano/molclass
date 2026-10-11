@@ -2,27 +2,39 @@ import os
 
 import yaml
 from jinja2 import BaseLoader, Environment
-from markupsafe import escape
 from pydantic_settings import BaseSettings
 
-from .source_result import Source, SourceURL
+from .source_result import Source
 
+# this source is a banner over the full width of the page, so it has its own, compact, layout instead of the card
 TEMPLATE = """
-{% if gene.remark %}<p class='small mb-1'>{{ gene.remark }}</p>{% endif %}
-<table class='table table-sm mb-1 fs-6'>
-    <tr>
-        <td class='text-nowrap' title='{{ table.columns.report }}'>PA-verslag</td>
-        <td class='text-break' style='white-space: pre-line'>{{ gene.report or '-' }}</td>
-    </tr>
-    <tr>
-        <td class='text-nowrap' title='{{ table.columns.mtb }}'>MTB</td>
-        <td class='text-break' style='white-space: pre-line'>{{ gene.mtb or '-' }}</td>
-    </tr>
-</table>
-<small class='text-muted' title='{{ table.notes|join("\n") }}'>
-    Alleen (waarschijnlijk) pathogene varianten, TMB &lt; 20 mut/Mb en niet evident subklonaal.
-    {% if gene.changed %}Tekst gewijzigd ten opzichte van de vorige versie.{% endif %}
-</small>
+<div class='card'>
+    <div class='card-header py-1'>
+        {% if table.url %}
+            <a target='_blank' class='btn btn-primary btn-sm my-1' href='{{ table.url }}'>{{ name }}</a>
+        {% else %}
+            <span class='fw-bold'>{{ name }}</span>
+        {% endif %}
+        <small class='text-muted ms-2' title='{{ table.notes|join("\n") }}'>
+            Advies over kiembaandiagnostiek. Geldt alleen voor (waarschijnlijk) pathogene varianten,
+            bij TMB &lt; 20 mut/Mb en als de variant niet evident subklonaal is.
+            {% if gene.changed %}Tekst gewijzigd ten opzichte van de vorige versie.{% endif %}
+        </small>
+    </div>
+    <div class='card-body py-2'>
+        {% if gene.remark %}<div class='small'>{{ gene.remark }}</div>{% endif %}
+        <table class='table table-sm table-borderless mb-0 fs-6'>
+            <tr class='border-bottom'>
+                <th class='w-50 py-0' title='{{ table.columns.report }}'>PA-verslag</th>
+                <th class='w-50 py-0' title='{{ table.columns.mtb }}'>MTB</th>
+            </tr>
+            <tr>
+                <td class='text-break pb-0' style='white-space: pre-line'>{{ gene.report or '-' }}</td>
+                <td class='text-break pb-0' style='white-space: pre-line'>{{ gene.mtb or '-' }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
 """
 
 
@@ -58,6 +70,9 @@ class Table3(Source):
             ("gene",): self.gene,
         }
 
+    def is_banner(self) -> bool:
+        return True
+
     def is_complete(self) -> bool:
         if not os.path.exists(secrets.table3_database):
             print("Could not find Tabel 3:", secrets.table3_database)
@@ -78,7 +93,7 @@ class Table3(Source):
             self.report(gene)
         else:
             # this is not complete, so gene() is tried when the meta data has a gene
-            self.html_text = "<span class='text-muted'>Gen nog niet bekend...</span>"
+            self.hidden = True
 
     async def gene(self):
         self.report(self.variant["gene"])
@@ -89,25 +104,21 @@ class Table3(Source):
         """
         table = get_table()
         gene = table["genes"].get(str(symbol).upper())
-
-        # the name and version are on the link to the table, at the bottom of the card
-        name = f"Tabel 3 ({table['version']})" if table.get("version") else "Tabel 3"
-        if table.get("url"):
-            self.html_title = ""
-            self.html_links["main"] = SourceURL(escape(name), table["url"])
-        else:
-            self.html_subtitle = f"<small>{escape(name)}</small>"
         self.complete = True
 
         if gene is None:
             # most genes are not in the table, don't use space on the page to say so
-            self.html_text = "Gen staat niet in Tabel 3."
             self.found = False
             self.hidden = True
             return
 
+        name = f"Tabel 3 ({table['version']})" if table.get("version") else "Tabel 3"
         template = Environment(loader=BaseLoader(), autoescape=True).from_string(TEMPLATE)
-        self.html_text = template.render(table=table, gene=gene)
+        self.html_text = template.render(table=table, gene=gene, name=name)
+
+    def get_html(self):
+        """The banner instead of the card of the other sources"""
+        return self.html_text
 
     def get_name(self):
         return "Tabel 3"

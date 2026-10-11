@@ -15,10 +15,11 @@ class Settings(BaseSettings):
     disabled_sources: str = Field(default="", env="DISABLED_SOURCES")
 
     sources: List[type] = [
+        # is_banner()=True sources should be at the start, they are shown above the cards
+        Table3,
         GenomeNexus,
         InHouse,
         GeneLists,
-        Table3,
         Alamut,
         COSMIC,
         ClinVar,
