@@ -47,16 +47,14 @@
 {% else %}
 <h6 class="text-center">Search Something for results</h2>
 {% endif %}
-    <div class="row row-cols-1 row-cols-md-3 g-4">
-        {% for source in sources %}
-            <div class="col {% if source.is_hidden() %}d-none{% endif %} {% if source.is_banner() %}w-100 d-none{% endif %}" id="{{ source.__class__.__name__ }}_div" {% if source.is_banner() %}data-banner{% endif %}>
+    {% macro loading_card(source) %}
                 <div class="card" >
                     <div class="card-body">
                         <h5 class="card-title">{{ source.name }}</h5>
                         <h6 class="card-subtitle mb-2 text-muted">Loading...</h6>
                         <div class="d-flex justify-content-center" data-source-loading="{{ source.__class__.__name__ }}">
                             <div class="spinner-border text-primary" role="status">
-                                
+
                             </div>
                         </div>
                     </div>
@@ -64,7 +62,29 @@
 
                     </div>
                 </div>
-            </div>
+    {% endmacro %}
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+        {% set stack = namespace(shown=false) %}
+        {% for source in sources %}
+            {% if source in stacked_sources %}
+                {# the stacked sources share one column, they are all put at the place of the first of them #}
+                {% if not stack.shown %}
+                    {% set stack.shown = true %}
+                    <div class="col">
+                        <div class="d-flex flex-column gap-4 h-100">
+                            {% for stacked_source in stacked_sources %}
+                                <div class="flex-fill {% if stacked_source.is_hidden() %}d-none{% endif %}" id="{{ stacked_source.__class__.__name__ }}_div">
+                                    {{ loading_card(stacked_source) }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="col {% if source.is_hidden() %}d-none{% endif %} {% if source.is_banner() %}w-100 d-none{% endif %}" id="{{ source.__class__.__name__ }}_div" {% if source.is_banner() %}data-banner{% endif %}>
+                    {{ loading_card(source) }}
+                </div>
+            {% endif %}
         {% endfor %}
     </div>
     <input type="hidden" id="ws_url" value="{{ websocket_url }}" />
