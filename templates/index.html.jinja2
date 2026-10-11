@@ -45,7 +45,66 @@
         </table>
     </div>
 {% else %}
-<h6 class="text-center">Search Something for results</h2>
+<div class="row justify-content-center">
+    <div class="col-lg-9 pt-3 pb-4">
+        <h1 class="h3 fw-light mb-4">
+            One search for everything you need to classify a variant detected in tumour DNA
+        </h1>
+        <p>
+            A variant detected when tumour DNA is analysed can be somatic or of germline origin. Either way, classifying it
+            means visiting many databases and typing the same variant into each of them.
+            Molclass does that round for you. Enter a variant once, and it collects what the main sources say about it
+            and shows the answers side by side: what is known about the gene and the position, how often the variant
+            is seen and in which tumour types, how other databases interpret it, and where to read further.
+        </p>
+        <p>
+            Molclass also shows whether one of the participating centres has classified the variant before, and how.
+            That earlier classification is there to support your own assessment, not to replace it: it is one more
+            piece of evidence to weigh, and a reason to look again when it differs from your own conclusion.
+        </p>
+
+        <h2 class="h4 mt-5">How to search</h2>
+        <p>Type a variant in the search box at the top of the page. These notations are understood:</p>
+        <table class="table table-sm w-auto">
+            <tr>
+                <td>Transcript and coding change</td>
+                <td><a href="{{ url_for('search') }}?search=NM_005228.5:c.2573T%3EG">NM_005228.5:c.2573T&gt;G</a></td>
+            </tr>
+            <tr>
+                <td>Gene and coding change</td>
+                <td><a href="{{ url_for('search') }}?search=EGFR:c.2573T%3EG">EGFR:c.2573T&gt;G</a></td>
+            </tr>
+            <tr>
+                <td>Genomic position (hg19)</td>
+                <td><a href="{{ url_for('search') }}?search=chr7:55259515:T:G">chr7:55259515:T:G</a></td>
+            </tr>
+            <tr>
+                <td>dbSNP identifier</td>
+                <td><a href="{{ url_for('search') }}?search=rs121434568">rs121434568</a></td>
+            </tr>
+        </table>
+        <p>
+            The results appear as cards, each from one source, and fill in as the sources answer.
+            The buttons at the bottom of a card open that source at the variant.
+        </p>
+
+        <h2 class="h4 mt-5">Built in collaboration, for collaboration</h2>
+        <p>
+            Molclass was started at the Erasmus MC and is now developed together with the Leiden University Medical
+            Center (LUMC). Both centres use it in their molecular diagnostics and share their variant classifications
+            through it. The software is open source.
+        </p>
+        <p>
+            Other centres are welcome to join, to use Molclass and to share their classifications in the same way.
+            The more centres take part, the more often a rare variant has been seen and classified before.
+        </p>
+
+        <p class="text-danger fw-bold fst-italic mt-4">
+            Molclass brings information together; it does not classify. The sources can be incomplete or disagree with
+            each other, and the interpretation of a variant remains the responsibility of the specialist who reports it.
+        </p>
+    </div>
+</div>
 {% endif %}
     {% macro loading_card(source) %}
                 <div class="card" >
