@@ -142,6 +142,12 @@ Set the `TABLE3_DATABASE` environment variable to the path of this file (default
 docker run     -p 8080:8080     -v ./table3.yml:/databases/table3.yml     -e TABLE3_DATABASE=/databases/table3.yml     ghcr.io/erasmusmc-bioinformatics/molclass:latest
 ```
 
+## Logos
+
+Every image (svg, png, jpg, webp or gif) in `static/logos` is shown at the bottom of the page, in alphabetical order.
+The name of the file without the extension is used as the description of the image, so `Erasmus MC.svg` and `LUMC.svg` work well.
+With Docker the folder can be mounted: `-v /host/path/to/logos:/app/static/logos`.
+
 ## Disabling sources
 
 Specific sources can be disabled by setting the `DISABLED_SOURCES` environment variable as a comma-separated list.
