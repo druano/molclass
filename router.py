@@ -44,6 +44,7 @@ def search(request: Request, search: str):
         {
             "request": request,
             "search": search,
+            "release_tag": settings.release_tag,
             "sources": (sources := [source({}, {}) for source in settings.sources]),
             "stacked_sources": [source for stacked in settings.stacked_sources for source in sources if type(source) is stacked],
             "websocket_url": websocket_url,
