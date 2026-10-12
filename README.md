@@ -108,6 +108,15 @@ The database has three tables, see `inhouse_db.py` for the notation of pos, ref 
 | `centers` | `name`, `source_file`, `variants` |
 | `classifications` | `center`, `gene`, `chr`, `pos`, `ref`, `alt`, `classification`, with an index on (`chr`, `pos`) |
 
+## AlphaGenome
+
+Shows the AlphaGenome Variant Impact (AVI) score of the variant from the [AlphaGenome Atlas](https://deepmind.google.com/science/alphagenome/atlas): where the score is in the distribution of all variants, and the two features that contribute most to it.
+This needs an API key, add it through the `ALPHAGENOME_API_KEY` environment variable, for example with Docker:
+```
+docker run     -p 8080:8080     -e ALPHAGENOME_API_KEY=<api-key>     ghcr.io/erasmusmc-bioinformatics/molclass:latest
+```
+The Atlas only has scores for substitutions of a single base. AlphaGenome only supports GRCh38, the hg38 position of the variant is looked up for it (see [Genomic coordinates](#genomic-coordinates)).
+
 ## Tabel 3
 
 Shows the advice of "Tabel 3" of the NVVP, VKGL and VKGN for the gene: when a (likely) pathogenic variant found in a tumor is a reason to advise germline diagnostics, in the pathology report and in the MTB.

@@ -27,6 +27,7 @@ class Settings(BaseSettings):
         CKB,
         TP53,
         LOVD,
+        AlphaGenome,
         OncoKB,
         cBioPortal,
         Varsome,
@@ -42,19 +43,18 @@ class Settings(BaseSettings):
         dbSNP,
     ]
 
-    # these are shown on top of each other in one column, at the place of the first of them in sources
-    stacked_sources: List[type] = [
-        Alamut,
-        Franklin,
-        CKB,
+    # the sources of a stack are shown on top of each other in one column, at the place of the first of them in sources
+    stacked_sources: List[List[type]] = [
+        [InHouse, AlphaGenome],
+        [Alamut, Franklin, CKB],
     ]
 
     # the width of a source on the page in twelfths of the page, a source that is not listed gets 4 (a third).
-    # 'stacked' is the column of the stacked sources
+    # A stack has the width of its first source
     source_widths: dict = {
         "GenomeNexus": 6,
         "InHouse": 3,
-        "stacked": 3,
+        "Alamut": 3,
     }
 
     # the order of the links on the Links card: the names of the is_link()=True sources and of the shared links

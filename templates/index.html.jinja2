@@ -144,16 +144,18 @@
             </div>
         {% endif %}
     {% endmacro %}
-    <div class="row row-cols-1 row-cols-md-3 g-4">
-        {% set stack = namespace(shown=false) %}
+    <div class="row row-cols-1 row-cols-md-3 g-2">
+        {% set shown = namespace(stacks=[], stack=none) %}
         {% for source in sources %}
-            {% if source in stacked_sources %}
-                {# the stacked sources share one column, they are all put at the place of the first of them #}
-                {% if not stack.shown %}
-                    {% set stack.shown = true %}
-                    <div class="col col-md-{{ source_widths.get('stacked', 4) }}">
-                        <div class="d-flex flex-column gap-4 h-100">
-                            {% for stacked_source in stacked_sources %}
+            {% set shown.stack = none %}
+            {% for stack in stacks %}{% if source in stack %}{% set shown.stack = stack %}{% endif %}{% endfor %}
+            {% if shown.stack %}
+                {# the sources of a stack share one column, they are all put at the place of the first of them #}
+                {% if shown.stack[0].__class__.__name__ not in shown.stacks %}
+                    {% set shown.stacks = shown.stacks + [shown.stack[0].__class__.__name__] %}
+                    <div class="col col-md-{{ source_widths.get(shown.stack[0].__class__.__name__, 4) }}">
+                        <div class="d-flex flex-column gap-2 h-100">
+                            {% for stacked_source in shown.stack %}
                                 {{ source_slot(stacked_source, "flex-fill") }}
                             {% endfor %}
                         </div>

@@ -46,7 +46,7 @@ def search(request: Request, search: str):
             "search": search,
             "release_tag": settings.release_tag,
             "sources": (sources := [source({}, {}) for source in settings.sources]),
-            "stacked_sources": [source for stacked in settings.stacked_sources for source in sources if type(source) is stacked],
+            "stacks": [[source for stacked in stack for source in sources if type(source) is stacked] for stack in settings.stacked_sources],
             "source_widths": settings.source_widths,
             # the Links card is shown at the place of the first source that is only a link
             "links_anchor": next((source for source in sources if source.is_link()), None),
