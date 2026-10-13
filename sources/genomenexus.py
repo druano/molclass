@@ -1,7 +1,7 @@
 import asyncio
+import inspect
 import urllib.parse
 
-import aiohttp
 from markupsafe import escape
 
 from util import reverse_complement
@@ -32,6 +32,15 @@ _gene_types: dict[str, str | None] = {}          # gene -> type
 _proteins: dict[str, tuple[int, list]] = {}      # transcript -> (length, [(domain name, start, end), ...])
 _hotspot_changes: dict[tuple, dict] = {}         # (gene, residue) -> {amino acid change: {tumor type: tumors}}
 _oncogenicity: dict[str, dict] = {}              # genomic location -> annotation of OncoKB
+
+
+# the gene types of OncoKB that are neither of the roles above, these get a gray label: (text, text when hovering)
+NOT_LISTED = "NOT_LISTED"
+OTHER_GENE_TYPES = {
+    "INSUFFICIENT_EVIDENCE": ("Oncogene / tumor suppressor gene: insufficient evidence", "OncoKB has insufficient evidence that it is an oncogene or a tumor suppressor gene"),
+    "NEITHER": ("Neither oncogene nor tumor suppressor gene", "according to OncoKB"),
+    NOT_LISTED: ("Not listed as oncogene or tumor suppressor gene", "not in the cancer gene list of OncoKB"),
+}
 
 
 def protein_svg(length: int, domains: list, position: int, label: str) -> str:
@@ -165,7 +174,7 @@ class GenomeNexus(Source):
                 return None
             # the lookup also returns genes that have the query as an alias
             types = [g.get("geneType") for g in genes if isinstance(g, dict) and g.get("hugoSymbol") == gene]
-            _gene_types[gene] = types[0] if types else None
+            _gene_types[gene] = types[0] if types else NOT_LISTED
         return _gene_types[gene]
 
     async def get_protein(self, transcript: str) -> tuple[int, list] | None:
@@ -175,7 +184,8 @@ class GenomeNexus(Source):
             if not isinstance(info, dict) or not info.get("proteinLength"):
                 return None
 
-            domains = info.get("pfamDomains") or []
+            # a protein without domains can have a list with one empty domain
+            domains = [domain for domain in info.get("pfamDomains") or [] if domain.get("pfamDomainId")]
             names = {}
             if domains:
                 ids = sorted({domain["pfamDomainId"] for domain in domains})
@@ -358,6 +368,18 @@ class GenomeNexus(Source):
             )
         return text
 
+    async def attempt(self, section: str, function, *args, default=None, **kwargs):
+        """
+        Returns the result of the (async) function, or the default when it fails. The details of the card
+        come from several places, when one of them fails the others are still shown and the failure is logged.
+        """
+        try:
+            result = function(*args, **kwargs)
+            return await result if inspect.isawaitable(result) else result
+        except Exception as e:
+            self.log_warning(f"Could not get the {section}: {type(e).__name__}: {e}")
+            return default
+
     async def add_details(self, query):
         """
         Shows if the gene of the variant is an oncogene and/or tumor suppressor gene, the exon and protein domain,
@@ -366,55 +388,66 @@ class GenomeNexus(Source):
         This is extra information, so the card is not failed if it can't be retrieved.
         """
         text = ""
-        try:
-            annotation = await self.get_annotation(query)
-            summary = self.get_summary(annotation)
+        annotation = await self.attempt("annotation", self.get_annotation, query, default={})
+        summary = await self.attempt("transcript of the annotation", self.get_summary, annotation, default={})
 
-            gene = summary.get("hugoGeneSymbol")
-            if gene and (gene_type := await self.get_gene_type(gene)) in GENE_TYPES:
-                labels = " ".join(f"<span class='badge {style} fs-6'>{label}</span>" for label, style in GENE_TYPES[gene_type])
-                text += f"<p class='mb-2'>{labels}</p>"
-                self.html_text = text
-
-            # variants outside the coding sequence don't have a position in the protein
-            position = (summary.get("proteinPosition") or {}).get("start")
-            transcript = summary.get("transcriptId")
-            protein = await self.get_protein(transcript) if position and transcript else None
-
-            if protein:
-                length, domains = protein
-                text += protein_svg(length, domains, int(position), summary.get("hgvspShort") or str(position))
-                self.html_text = text
-
-            details = []
-            if summary.get("exon"):
-                details.append(f"Exon {escape(str(summary['exon']).split('/')[0])}")
-            if protein:
-                details += [f"{escape(name)} domain" for name, start, end in protein[1] if start <= int(position) <= end]
-            if details:
-                text += f"<p class='small mb-1'>{' &middot; '.join(dict.fromkeys(details))}</p>"
-
-            pathogenicity = [line for line in (self.get_clinvar(annotation), await self.get_oncokb(annotation)) if line]
-            # a line between the sections: the position in the gene, the interpretation and how often it is found
-            if pathogenicity:
-                text += f"<p class='small mt-2 mb-2 pt-2 border-top'>{'<br />'.join(pathogenicity)}</p>"
-                self.html_text = text
-
-            # SIGNAL has the share of the patients per tumor type, that says more than the number of tumors
-            # of the hotspot. So the tumor types of the hotspot are only drawn when SIGNAL doesn't have the variant.
-            signal = self.get_signal(annotation, query)
-            found = await self.get_hotspot_section(annotation, summary, gene, with_chart=not signal) + signal
-            if found:
-                text += f"<div class='mt-2 pt-2 border-top'>{found}</div>"
+        gene = summary.get("hugoGeneSymbol")
+        gene_type = await self.attempt("gene type", self.get_gene_type, gene) if gene else None
+        if gene_type in GENE_TYPES:
+            labels = " ".join(f"<span class='badge {style} fs-6'>{label}</span>" for label, style in GENE_TYPES[gene_type])
+            text += f"<p class='mb-2'>{labels}</p>"
+            self.html_text = text
+        elif gene_type:
+            # say so when it is neither, otherwise it looks the same as when the role of the gene could not be retrieved
+            label, reason = OTHER_GENE_TYPES.get(gene_type, (str(gene_type).replace("_", " ").capitalize(), "gene type of OncoKB"))
+            text += (
+                f"<p class='mb-2'><span class='badge text-bg-secondary text-wrap fs-6' title='{escape(gene)}: {escape(reason)}'>"
+                f"{escape(label)}</span></p>"
+            )
             self.html_text = text
 
-            cosmic = ((annotation.get("my_variant_info") or {}).get("annotation") or {}).get("cosmic") or {}
-            if isinstance(cosmic, dict) and cosmic.get("cosmicId"):
-                cosmic_id = urllib.parse.quote(str(cosmic["cosmicId"]))
-                self.shared_links["COSMIC"] = SourceURL(f"COSMIC {cosmic_id}", f"https://cancer.sanger.ac.uk/cosmic/search?genome=37&q={cosmic_id}")
-        except (TimeoutError, aiohttp.ClientError, KeyError, TypeError, ValueError):
-            self.timeout = False
+        # variants outside the coding sequence don't have a position in the protein
+        position = (summary.get("proteinPosition") or {}).get("start")
+        transcript = summary.get("transcriptId")
+        protein = await self.attempt("protein", self.get_protein, transcript) if position and transcript else None
+
+        if protein:
+            length, domains = protein
+            text += await self.attempt("protein diagram", protein_svg, length, domains, int(position), summary.get("hgvspShort") or str(position), default="")
+            self.html_text = text
+
+        details = []
+        if summary.get("exon"):
+            details.append(f"Exon {escape(str(summary['exon']).split('/')[0])}")
+        if protein:
+            details += [f"{escape(name)} domain" for name, start, end in protein[1] if start <= int(position) <= end]
+        if details:
+            text += f"<p class='small mb-1'>{' &middot; '.join(dict.fromkeys(details))}</p>"
+
+        pathogenicity = [
+            await self.attempt("ClinVar interpretation", self.get_clinvar, annotation),
+            await self.attempt("OncoKB interpretation", self.get_oncokb, annotation),
+        ]
+        pathogenicity = [line for line in pathogenicity if line]
+        # a line between the sections: the position in the gene, the interpretation and how often it is found
+        if pathogenicity:
+            text += f"<p class='small mt-2 mb-2 pt-2 border-top'>{'<br />'.join(pathogenicity)}</p>"
+            self.html_text = text
+
+        # SIGNAL has the share of the patients per tumor type, that says more than the number of tumors
+        # of the hotspot. So the tumor types of the hotspot are only drawn when SIGNAL doesn't have the variant.
+        signal = await self.attempt("SIGNAL frequencies", self.get_signal, annotation, query, default="")
+        hotspot = await self.attempt("cancer hotspot", self.get_hotspot_section, annotation, summary, gene, with_chart=not signal, default="")
+        if hotspot or signal:
+            text += f"<div class='mt-2 pt-2 border-top'>{hotspot}{signal}</div>"
         self.html_text = text
+
+        cosmic = ((annotation.get("my_variant_info") or {}).get("annotation") or {}).get("cosmic") or {}
+        if isinstance(cosmic, dict) and cosmic.get("cosmicId"):
+            cosmic_id = urllib.parse.quote(str(cosmic["cosmicId"]))
+            self.shared_links["COSMIC"] = SourceURL(f"COSMIC {cosmic_id}", f"https://cancer.sanger.ac.uk/cosmic/search?genome=37&q={cosmic_id}")
+        # a timeout of one of the requests is not a timeout of the card
+        self.timeout = False
 
     async def chr_pos_ref_alt(self):
         """
