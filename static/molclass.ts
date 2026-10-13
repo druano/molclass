@@ -310,11 +310,33 @@ function onClose(event: any): void {
         let source_div = document.getElementById(`${source_name}_div`)
         source_div.style.opacity = "0.3";
     });
+    showMissingVariant();
     var spinners = document.querySelectorAll(".spinner-border");
     [].forEach.call(spinners, function(element) {
         element.remove();
     });
     console.log(logs)
+}
+
+// what is still not known of the variant when the server is done is shown as not available,
+// an empty box (or one that keeps loading) doesn't say if something went wrong
+function showMissingVariant(): void {
+    const reason = "None of the sources could determine this, they may be unavailable at the moment. Search again to retry.";
+    const missing = (text: string, size: string) => `<span class="text-danger fst-italic ${size}" title="${reason}">${text}</span>`;
+    ["gene", "transcript", "cdot", "pdot"].forEach(function(key) {
+        let elem = document.getElementById(`${key}_variant`);
+        if (elem && !variant.get(key)) {
+            elem.innerHTML = missing("not available", "fs-6");
+        }
+    });
+
+    let gdot_elem = document.getElementById("gdot_variant");
+    if (gdot_elem && !(variant.get("gdot") && variant.get("gdot38"))) {
+        let positions = [["gdot", "hg19"], ["gdot38", "hg38"]].map(function([key, build]) {
+            return variant.get(key) ? `${variant.get(key)} (${build})` : missing(`${build} not available`, "");
+        });
+        gdot_elem.innerHTML = `<span>${positions.join("<br />")}</span>`;
+    }
 }
 
 // init the bootstrap tooltip callbacks

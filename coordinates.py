@@ -4,6 +4,9 @@ Resolves a transcript:cdot to genomic coordinates, for every source that needs t
 Sources should not look these up themselves: here a variant is only looked up once,
 also when several sources ask for it at the same time, and the result is kept for the next search.
 Use Source.resolve_coordinates() from a source.
+
+The services that are used fail now and then, so a request that fails is tried again, and there are
+two services for everything: Mutalyzer and Ensembl for the position, Ensembl and UCSC for the reference.
 """
 import asyncio
 import re
@@ -22,8 +25,16 @@ MUTALYZER_TIMEOUT = aiohttp.ClientTimeout(total=5)
 ENSEMBL_TIMEOUT = aiohttp.ClientTimeout(total=20)
 CACHE_MAX = 1000
 
+# a request that fails because of the service (no answer, too many requests, server error) is tried again,
+# after waiting this many seconds. An answer that says the variant is wrong is not tried again.
+RETRY_WAITS = (0.5, 1.5)
+TEMPORARY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+UCSC_GENOMES = {"GRCh37": "hg19", "GRCh38": "hg38"}
+
 GENOMIC_DESCRIPTION_RE = re.compile(r"(?P<accession>NC_0*(?P<number>\d+)\.\d+):(?P<gdot>g\..+)")
 GDOT_SNV_RE = re.compile(r"g\.(?P<pos>\d+)(?P<ref>[ACGT])>(?P<alt>[ACGT])")
+GDOT_INDEL_RE = re.compile(r"g\.(?P<start>\d+)(?:_(?P<end>\d+))?(?P<type>delins|del|dup|ins)(?P<bases>[ACGT]*)")
+PROTEIN_RE = re.compile(r"p\.\(?(?P<change>[^()]+)\)?$")
 REFERENCE_RE = re.compile("^[ACGTN]+$")
 ACCESSION_CHROMOSOMES = {"23": "X", "24": "Y", "12920": "MT"}
 
@@ -47,6 +58,7 @@ _coordinates: dict[tuple, Coordinates] = {}
 _gdots: dict[tuple, str] = {}
 _genes: dict[tuple, str] = {}
 _references: dict[tuple, str] = {}
+_descriptions: dict[tuple, dict] = {}
 _pending: dict[tuple, asyncio.Future] = {}
 
 
@@ -76,15 +88,25 @@ async def _once(cache: dict, key: tuple, fetch):
 
 
 async def _get(session: aiohttp.ClientSession, url: str, timeout: aiohttp.ClientTimeout, as_json: bool = True):
-    """Returns the parsed json (or text) of the url, None if the request or the parsing fails"""
+    """
+    Returns the parsed json (or text) of the url, None if the request or the parsing fails.
+    The request is tried again when the service fails, see RETRY_WAITS.
+    """
     headers = {"Accept": "application/json" if as_json else "text/plain"}
-    try:
-        async with session.get(url, headers=headers, timeout=timeout) as response:
-            if as_json:
-                return await response.json(content_type=None)
-            return await response.text()
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
-        return None
+    for wait in (0, *RETRY_WAITS):
+        await asyncio.sleep(wait)
+        try:
+            async with session.get(url, headers=headers, timeout=timeout) as response:
+                if response.status in TEMPORARY_STATUSES:
+                    continue
+                if as_json:
+                    return await response.json(content_type=None)
+                return await response.text()
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            continue
+        except ValueError:
+            return None
+    return None
 
 
 def gdot_from_vcf(chrom: str, pos: int, ref: str, alt: str) -> str:
@@ -105,16 +127,82 @@ def gdot_from_vcf(chrom: str, pos: int, ref: str, alt: str) -> str:
     return f"{chrom}:g.{span}del" + (f"ins{alt}" if alt else "")
 
 
+def _on_chromosome(answer, build: str) -> str | None:
+    """
+    Mutalyzer rejects a position in an intron on a transcript (NM_005228.5:c.88+80C>G), its answer then has
+    the description on the chromosome that it does accept: NC_000007.13(NM_005228.5):c.88+80C>G. Returns that one.
+    """
+    errors = (answer.get("custom") or {}).get("errors") if isinstance(answer, dict) else None
+    for error in errors if isinstance(errors, list) else []:
+        if isinstance(error, dict) and error.get("code") == "EINTRONIC":
+            for option in error.get("options") or []:
+                if str(option.get("assembly_id")).upper() == build.upper():
+                    return option.get("description")
+    return None
+
+
+async def _mutalyzer_normalize(session: aiohttp.ClientSession, hgvs: str, build: str) -> dict | None:
+    """Returns the answer of the Mutalyzer normalizer, also for a position in an intron. None if it has no answer."""
+    url = "https://mutalyzer.nl/api/normalize/{}"
+    answer = await _get(session, url.format(urllib.parse.quote(hgvs, safe="")), MUTALYZER_TIMEOUT)
+    if on_chromosome := _on_chromosome(answer, build):
+        answer = await _get(session, url.format(urllib.parse.quote(on_chromosome, safe="")), MUTALYZER_TIMEOUT)
+    if isinstance(answer, dict) and answer.get("normalized_description"):
+        return answer
+    return None
+
+
+def _chromosome_gdot(description) -> str | None:
+    """NC_000007.13:g.55087138C>G -> 7:g.55087138C>G"""
+    if isinstance(description, str) and (m := GENOMIC_DESCRIPTION_RE.fullmatch(description)):
+        chrom = ACCESSION_CHROMOSOMES.get(m.group("number"), m.group("number"))
+        return f"{chrom}:{m.group('gdot')}"
+    return None
+
+
 async def _mutalyzer_gdot(session: aiohttp.ClientSession, hgvs: str, build: str) -> str | None:
     """Returns the hgvs genomic notation (7:g.55242465_55242479del) according to Mutalyzer"""
     enc_hgvs = urllib.parse.quote(hgvs, safe="")
     url = f"https://mutalyzer.nl/api/map/?description={enc_hgvs}&reference_id={build.upper()}&filter_out=true"
     mapped = await _get(session, url, MUTALYZER_TIMEOUT)
-    description = mapped.get("genomic_description") if isinstance(mapped, dict) else None
-    if description and (m := GENOMIC_DESCRIPTION_RE.fullmatch(description)):
-        chrom = ACCESSION_CHROMOSOMES.get(m.group("number"), m.group("number"))
-        return f"{chrom}:{m.group('gdot')}"
+    if gdot := _chromosome_gdot(mapped.get("genomic_description") if isinstance(mapped, dict) else None):
+        return gdot
+
+    if _on_chromosome(mapped, build):
+        normalized = await _mutalyzer_normalize(session, hgvs, build) or {}
+        for equivalent in (normalized.get("equivalent_descriptions") or {}).get("g") or []:
+            if gdot := _chromosome_gdot(equivalent.get("description")):
+                return gdot
     return None
+
+
+async def _from_gdot(session: aiohttp.ClientSession, gdot: str, build: str) -> Coordinates | None:
+    """
+    Returns the coordinates of a deletion/insertion of which only the hgvs genomic notation is known,
+    the bases are taken from the reference genome. For when Ensembl VEP has no answer.
+    """
+    chrom, description = gdot.split(":", 1)
+    m = GDOT_INDEL_RE.fullmatch(description)
+    if not m or (m.group("type") in ("ins", "delins")) != bool(m.group("bases")):
+        return None
+    start = int(m.group("start"))
+    end = int(m.group("end") or start)
+    kind, bases = m.group("type"), m.group("bases")
+
+    # like the vcf_string of Ensembl VEP: with the base in front of the change
+    if kind == "ins":  # between start and end, so start is the base in front of it
+        first = end = start
+    else:
+        first = start - 1
+    sequence = await reference(session, chrom, first, end, build)
+    if not sequence:
+        return None
+
+    if kind == "del":
+        return Coordinates(build, chrom, first, sequence, sequence[0], gdot)
+    if kind == "dup":
+        return Coordinates(build, chrom, first, sequence[0], sequence, gdot)
+    return Coordinates(build, chrom, first, sequence, sequence[0] + bases, gdot)
 
 
 async def _resolve(session: aiohttp.ClientSession, hgvs: str, build: str) -> Coordinates | None:
@@ -138,6 +226,9 @@ async def _resolve(session: aiohttp.ClientSession, hgvs: str, build: str) -> Coo
         if len(parts) == 4 and parts[1].isdigit():
             chrom, pos, ref, alt = parts
             return Coordinates(build, chrom, int(pos), ref, alt, gdot or gdot_from_vcf(chrom, int(pos), ref, alt))
+
+    if gdot:
+        return await _from_gdot(session, gdot, build)
     return None
 
 
@@ -182,13 +273,37 @@ async def resolve_gene(session: aiohttp.ClientSession, transcript: str) -> str |
     return await _once(_genes, ("gene", accession), lambda: _resolve_gene(session, accession))
 
 
+async def _describe(session: aiohttp.ClientSession, hgvs: str) -> dict | None:
+    normalized = await _mutalyzer_normalize(session, hgvs, "GRCh37")
+    if normalized is None:
+        return None
+    # the effect on the protein is not predicted for everything, a variant at a splice site for example: p.?
+    protein = PROTEIN_RE.search(str((normalized.get("protein") or {}).get("description") or ""))
+    return {"gene": normalized.get("gene_id"), "pdot": f"p.{protein.group('change')}" if protein else "p.?"}
+
+
+async def describe(session: aiohttp.ClientSession, hgvs: str) -> dict | None:
+    """
+    Returns the gene and the protein change (hgvs, three letter amino acids) of a transcript:cdot according to Mutalyzer,
+    None if Mutalyzer has no answer. For when none of the sources has them.
+    """
+    return await _once(_descriptions, ("describe", hgvs), lambda: _describe(session, hgvs))
+
+
 async def _reference(session: aiohttp.ClientSession, chrom: str, start: int, end: int, build: str) -> str | None:
     url = f"{ENSEMBL_URLS[build]}/sequence/region/human/{chrom}:{start}..{end}:1?content-type=text/plain"
     sequence = await _get(session, url, ENSEMBL_TIMEOUT, as_json=False)
     sequence = (sequence or "").strip().upper()
-    if len(sequence) != end - start + 1 or not REFERENCE_RE.match(sequence):
-        return None
-    return sequence
+    if len(sequence) == end - start + 1 and REFERENCE_RE.match(sequence):
+        return sequence
+
+    ucsc_chrom = "chrM" if chrom == "MT" else f"chr{chrom}"
+    url = f"https://api.genome.ucsc.edu/getData/sequence?genome={UCSC_GENOMES[build]};chrom={ucsc_chrom};start={start - 1};end={end}"
+    answer = await _get(session, url, ENSEMBL_TIMEOUT)
+    sequence = str(answer.get("dna") or "").upper() if isinstance(answer, dict) else ""
+    if len(sequence) == end - start + 1 and REFERENCE_RE.match(sequence):
+        return sequence
+    return None
 
 
 async def reference(session: aiohttp.ClientSession, chrom: str, start: int, end: int, build: str = "GRCh37") -> str | None:

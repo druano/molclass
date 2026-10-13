@@ -225,6 +225,13 @@ Sources that need the genomic position of a `transcript:cdot` should not look it
 This uses Mutalyzer, and Ensembl VEP for what Mutalyzer can't map, and returns the chromosome, position, ref and alt as in a vcf, on the forward strand.
 A variant is only looked up once, also when several sources ask for it in the same iteration, and the result is cached.
 
+These services fail now and then, so a request that fails is tried again (see `RETRY_WAITS` in `coordinates.py`) and there are two services for everything:
+Mutalyzer also maps positions in an intron, the bases of a deletion/insertion can be taken from the reference genome when Ensembl VEP has no answer, and the reference genome comes from Ensembl or UCSC.
+
+The gene, protein change and genomic positions at the top of the page come from the sources.
+If none of the sources had one of them at the end of a search, it is looked up with Mutalyzer (`complete_variant` in `router.py`), so they are always shown for a `transcript:cdot`.
+A protein change that is not known is shown as `p.?`.
+
 `await self.resolve_gdot()` only returns the hgvs genomic notation, which is faster for deletions and insertions.
 
 In the same way `await self.resolve_gene()` returns the gene of the searched transcript, for a source that only needs the gene and should not have to wait for another source to add it to the meta data.

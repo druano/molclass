@@ -261,11 +261,30 @@ function onClose(event) {
         var source_div = document.getElementById(source_name + "_div");
         source_div.style.opacity = "0.3";
     });
+    showMissingVariant();
     var spinners = document.querySelectorAll(".spinner-border");
     [].forEach.call(spinners, function (element) {
         element.remove();
     });
     console.log(logs);
+}
+function showMissingVariant() {
+    var reason = "None of the sources could determine this, they may be unavailable at the moment. Search again to retry.";
+    var missing = function (text, size) { return "<span class=\"text-danger fst-italic " + size + "\" title=\"" + reason + "\">" + text + "</span>"; };
+    ["gene", "transcript", "cdot", "pdot"].forEach(function (key) {
+        var elem = document.getElementById(key + "_variant");
+        if (elem && !variant.get(key)) {
+            elem.innerHTML = missing("not available", "fs-6");
+        }
+    });
+    var gdot_elem = document.getElementById("gdot_variant");
+    if (gdot_elem && !(variant.get("gdot") && variant.get("gdot38"))) {
+        var positions = [["gdot", "hg19"], ["gdot38", "hg38"]].map(function (pair) {
+            var key = pair[0], build = pair[1];
+            return variant.get(key) ? variant.get(key) + " (" + build + ")" : missing(build + " not available", "");
+        });
+        gdot_elem.innerHTML = "<span>" + positions.join("<br />") + "</span>";
+    }
 }
 function initTooltips(parent) {
     var tooltipTriggerList = parent.querySelectorAll('[data-bs-toggle="tooltip"]');

@@ -12,10 +12,12 @@ from models import VariantDataScheme, VariantSource
 
 ic.configureOutput(prefix="debug-", includeContext=True)
 
+import coordinates
 from config import settings
 from search import parse_search, parse_transcript
 from sources.source_result import Source, SourceURL
 from templates import templates
+from util import get_pdot_abbreviation
 
 router = APIRouter(
     tags=["root"],
@@ -255,6 +257,45 @@ async def send_consensus(consensus: dict, websocket: WebSocket):
         "data": consensus
     })
 
+async def complete_variant(variant: dict, consensus: dict, websocket: WebSocket):
+    """
+    The gene, protein change and genomic positions at the top of the page come from the sources. When none of the sources
+    had one of them (they failed, or are disabled) it is looked up here, so they are always shown for a transcript:cdot.
+    """
+    if not variant.get("transcript") or not variant.get("cdot"):
+        return
+    missing = [key for key in ("gene", "pdot", "gdot", "gdot38") if not variant.get(key)]
+    if not missing:
+        return
+
+    hgvs = f"{variant['transcript']}:{variant['cdot']}"
+    found = {}
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        if "gdot" in missing:
+            found["gdot"] = await coordinates.resolve_gdot(session, hgvs, "GRCh37")
+        if "gdot38" in missing:
+            found["gdot38"] = await coordinates.resolve_gdot(session, hgvs, "GRCh38")
+        if "gene" in missing or "pdot" in missing:
+            description = await coordinates.describe(session, hgvs) or {}
+            if "gene" in missing:
+                found["gene"] = description.get("gene") or await coordinates.resolve_gene(session, str(variant["transcript"]))
+            if "pdot" in missing:
+                # p.? is how hgvs writes that the effect on the protein is not known
+                found["pdot"] = get_pdot_abbreviation(description.get("pdot") or "p.?")
+
+    found = {key: value for key, value in found.items() if value}
+    not_found = [key for key in missing if key not in found]
+    for key, value in found.items():
+        variant[key] = value
+        consensus[key] = {value: ["Molclass"]}
+    if found:
+        await send_log(f"None of the sources had {', '.join(found)}, looked up: {found}", websocket)
+        await send_variant(variant, websocket)
+        await send_consensus(consensus, websocket)
+    if not_found:
+        await send_log(f"Could not determine {', '.join(not_found)} of {hgvs}", websocket, level="warning")
+
+
 @router.websocket("/ws/{search}")
 async def websocket_endpoint(websocket: WebSocket, search: str, db_session: SessionDep):
     """
@@ -378,6 +419,8 @@ async def websocket_endpoint(websocket: WebSocket, search: str, db_session: Sess
                 print("[DEBUG] Reached max iterations limit")
                 await send_log(f"Reached max iterations: {iteration}/{max_iterations}, stopping", websocket)
                 break
+
+        await complete_variant(variant, consensus_variant, websocket)
 
         # if there are still sources in the sources list, that means not all of them had enough meta data to run
         if sources:
