@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import re
 import urllib.parse
 
 from markupsafe import escape
@@ -293,7 +294,10 @@ class GenomeNexus(Source):
         url = "https://www.oncokb.org/"
         if query.get("hugoSymbol") and oncokb.get("geneExist"):
             url += f"gene/{urllib.parse.quote(str(query['hugoSymbol']))}"
-            if effects and oncokb.get("variantExist") and query.get("alteration"):
+            # OncoKB has a page for every variant of a gene it has, also when the variant is only
+            # classified by a rule (truncating mutations of BRCA1), like the link on the Genome Nexus website.
+            # A variant outside the protein gets an alteration like *30*, that has no page
+            if re.fullmatch(r"[A-Z]\d+.*", str(query.get("alteration") or "")):
                 url += f"/{urllib.parse.quote(str(query['alteration']))}"
         effect = f"<b>{escape(', '.join(effects))}</b>" if effects else NOT_AVAILABLE
         return f"<a target='_blank' href='{escape(url)}'>OncoKB</a>: {effect}"
