@@ -9,12 +9,13 @@ from util import reverse_complement
 from .source_result import Source, SourceURL
 
 # the role of a gene in cancer, as shown on the Genome Nexus website. It comes from the OncoKB cancer gene list.
-# Each role is shown as a label: (text, style of the label)
+# Each role is shown as a band with a colored bar on the left: (text, color of the bar)
 GENE_TYPES = {
-    "ONCOGENE": [("Oncogene", "text-bg-danger")],
-    "TSG": [("Tumor suppressor gene", "text-bg-primary")],
-    "ONCOGENE_AND_TSG": [("Oncogene", "text-bg-danger"), ("Tumor suppressor gene", "text-bg-primary")],
+    "ONCOGENE": [("Oncogene", "#dc3545")],
+    "TSG": [("Tumor suppressor gene", "#0d6efd")],
+    "ONCOGENE_AND_TSG": [("Oncogene", "#dc3545"), ("Tumor suppressor gene", "#0d6efd")],
 }
+GENE_TYPE_OTHER_COLOR = "#9a9d96"
 
 # the colors of the protein domains, the same domain gets the same color
 DOMAIN_COLORS = ["#2dcf00", "#ff5353", "#5b5bff", "#ebd61d", "#ba21e0", "#ff9c42", "#ff7dff", "#b9264f", "#baba21", "#c48484"]
@@ -42,6 +43,30 @@ OTHER_GENE_TYPES = {
     "NEITHER": ("Neither oncogene nor tumor suppressor gene", "according to OncoKB"),
     NOT_LISTED: ("Not listed as oncogene or tumor suppressor gene", "not in the cancer gene list of OncoKB"),
 }
+
+
+def gene_type_html(label: str, color: str, tooltip: str = "") -> str:
+    """
+    The role of the gene: a band across the card with a colored bar on the left and a pale background of the same color.
+    It doesn't look like a button, because it is not a link.
+    """
+    title = f" title='{escape(tooltip)}'" if tooltip else ""
+    return (
+        f"<div class='fw-semibold ps-2 py-1 mb-1' style='border-left: 4px solid {color}; background: {color}0f'{title}>"
+        f"{escape(label)}</div>"
+    )
+
+
+def link_line(name: str, url: str, value: str) -> str:
+    """
+    A line of the card with a button to the source and what the source says, like the links of the other cards.
+    The buttons have the same width, so the values are below each other.
+    """
+    return (
+        "<div class='d-flex align-items-center gap-2 mb-1 small'>"
+        f"<a target='_blank' class='btn btn-primary btn-sm py-0 flex-shrink-0' style='min-width: 7.5rem' href='{escape(url)}'>{escape(name)}</a>"
+        f"<span>{value}</span></div>"
+    )
 
 
 def protein_svg(length: int, domains: list, position: int, label: str) -> str:
@@ -254,21 +279,18 @@ class GenomeNexus(Source):
         clinvar = (annotation.get("clinvar") or {}).get("annotation") or {}
         significance = str(clinvar.get("clinicalSignificance") or "").replace("_", " ")
         if not significance or not clinvar.get("clinvarId"):
-            return f"<a target='_blank' href='https://www.ncbi.nlm.nih.gov/clinvar/'>ClinVar</a>: {NOT_AVAILABLE}"
+            return link_line("ClinVar", "https://www.ncbi.nlm.nih.gov/clinvar/", NOT_AVAILABLE)
         # for conflicting classifications: Pathogenic(1)|Uncertain_significance(1)
         conflicting = str(clinvar.get("conflictingClinicalSignificance") or "").replace("_", " ").replace("|", ", ")
         url = f"https://www.ncbi.nlm.nih.gov/clinvar/variation/{urllib.parse.quote(str(clinvar['clinvarId']))}/"
-        return (
-            f"<a target='_blank' href='{url}'>ClinVar</a>: <b>{escape(significance)}</b>"
-            + (f" ({escape(conflicting)})" if conflicting else "")
-        )
+        return link_line("ClinVar", url, f"<b>{escape(significance)}</b>" + (f" ({escape(conflicting)})" if conflicting else ""))
 
     async def get_oncokb(self, annotation: dict) -> str:
         """
         Returns the html for the effect of the variant according to OncoKB (Oncogenic, Gain-of-function),
         NA if OncoKB doesn't know. This is what OncoKB makes public, the treatments need a license (see the OncoKB source).
         """
-        unknown = f"<a target='_blank' href='https://www.oncokb.org/'>OncoKB</a>: {NOT_AVAILABLE}"
+        unknown = link_line("OncoKB", "https://www.oncokb.org/", NOT_AVAILABLE)
         ref, _, alt = str(annotation.get("allele_string") or "").partition("/")
         location = f"{annotation.get('seq_region_name')},{annotation.get('start')},{annotation.get('end')},{ref},{alt}"
         if not ref or not alt or "None" in location:
@@ -300,14 +322,14 @@ class GenomeNexus(Source):
             if re.fullmatch(r"[A-Z]\d+.*", str(query.get("alteration") or "")):
                 url += f"/{urllib.parse.quote(str(query['alteration']))}"
         effect = f"<b>{escape(', '.join(effects))}</b>" if effects else NOT_AVAILABLE
-        return f"<a target='_blank' href='{escape(url)}'>OncoKB</a>: {effect}"
+        return link_line("OncoKB", url, effect)
 
     async def get_hotspot_section(self, annotation: dict, summary: dict, gene: str | None, with_chart: bool) -> str:
         """
         Returns the html that tells if the variant is a hotspot of cancerhotspots.org, and in which tumor types
         """
         hotspots = self.get_hotspots(annotation)
-        link = "<a target='_blank' href='https://www.cancerhotspots.org/'>{}</a>"
+        url = "https://www.cancerhotspots.org/"
         lines, charts = [], ""
         for residue, count in hotspots.items():
             changes = await self.get_hotspot_changes(gene, residue) if gene else {}
@@ -334,14 +356,14 @@ class GenomeNexus(Source):
                         for tumor_type, tumors in tumor_types.items():
                             everything[tumor_type] = everything.get(tumor_type, 0) + tumors
                     charts += tumor_types_svg(everything, f"a mutation at {residue}")
-            lines.append(f"{link.format('Cancer hotspot')}: <b title='{escape(tooltip)}'>{escape(label)}</b>")
+            lines.append(link_line("Cancer hotspots", url, f"<b title='{escape(tooltip)}'>{escape(label)}</b>"))
 
         # say so when it is not a hotspot, otherwise it looks the same as when the hotspots could not be retrieved
         if not hotspots and isinstance((annotation.get("hotspots") or {}).get("annotation"), list):
-            lines.append(f"<span class='text-muted'>Not a {link.format('cancer hotspot')}</span>")
+            lines.append(link_line("Cancer hotspots", url, "<span class='text-muted'>Not a hotspot</span>"))
         if not lines:
             return ""
-        return f"<p class='small mb-1'>{'<br />'.join(lines)}</p>{charts if with_chart else ''}"
+        return f"{''.join(lines)}{charts if with_chart else ''}"
 
     def get_signal(self, annotation: dict, query: str) -> str:
         """
@@ -365,10 +387,12 @@ class GenomeNexus(Source):
             if status == "germline" and signal.get("mskExperReview"):
                 extra.append("reviewed by MSK experts")
             text += (
-                f"<p class='small mb-1'><a target='_blank' href='{escape(url)}'>SIGNAL</a>: "
-                f"<b title='{escape(tooltip)}'>{escape(status)} in {100 * variants / patients:.2g}% of patients</b>"
-                f"{escape(', ' + ', '.join(extra)) if extra else ''}</p>"
-                f"{signal_svg(counts, status)}"
+                link_line(
+                    "SIGNAL", url,
+                    f"<b title='{escape(tooltip)}'>{escape(status)} in {100 * variants / patients:.2g}% of patients</b>"
+                    f"{escape(', ' + ', '.join(extra)) if extra else ''}",
+                )
+                + signal_svg(counts, status)
             )
         return text
 
@@ -398,16 +422,13 @@ class GenomeNexus(Source):
         gene = summary.get("hugoGeneSymbol")
         gene_type = await self.attempt("gene type", self.get_gene_type, gene) if gene else None
         if gene_type in GENE_TYPES:
-            labels = " ".join(f"<span class='badge {style} fs-6'>{label}</span>" for label, style in GENE_TYPES[gene_type])
-            text += f"<p class='mb-2'>{labels}</p>"
+            labels = "".join(gene_type_html(label, color) for label, color in GENE_TYPES[gene_type])
+            text += f"<div class='mb-2'>{labels}</div>"
             self.html_text = text
         elif gene_type:
             # say so when it is neither, otherwise it looks the same as when the role of the gene could not be retrieved
             label, reason = OTHER_GENE_TYPES.get(gene_type, (str(gene_type).replace("_", " ").capitalize(), "gene type of OncoKB"))
-            text += (
-                f"<p class='mb-2'><span class='badge text-bg-secondary text-wrap fs-6' title='{escape(gene)}: {escape(reason)}'>"
-                f"{escape(label)}</span></p>"
-            )
+            text += f"<div class='mb-2'>{gene_type_html(label, GENE_TYPE_OTHER_COLOR, f'{gene}: {reason}')}</div>"
             self.html_text = text
 
         # variants outside the coding sequence don't have a position in the protein
@@ -435,7 +456,7 @@ class GenomeNexus(Source):
         pathogenicity = [line for line in pathogenicity if line]
         # a line between the sections: the position in the gene, the interpretation and how often it is found
         if pathogenicity:
-            text += f"<p class='small mt-2 mb-2 pt-2 border-top'>{'<br />'.join(pathogenicity)}</p>"
+            text += f"<div class='mt-2 mb-2 pt-2 border-top'>{''.join(pathogenicity)}</div>"
             self.html_text = text
 
         # SIGNAL has the share of the patients per tumor type, that says more than the number of tumors
