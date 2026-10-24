@@ -1,14 +1,23 @@
+import asyncio
 import json
 import re
 import urllib.parse
 from collections import defaultdict
 
-from aiohttp import ClientResponse
+import aiohttp
 from jinja2 import BaseLoader, Environment
 
 from .source_result import Source, SourceURL
 
 _LOVD_BOT_PROTECTION_RE = re.compile(r"checking your browser", re.I)
+
+# LOVD can be slow, and the answer for a gene with many entries is large: it gets more time than the 5 seconds
+# of the other sources, and a request that fails is tried again after waiting this many seconds.
+# Normally LOVD answers within a second, at most it takes 3 x 10 + 1 + 2 seconds before the card gives up.
+LOVD_TIMEOUT = aiohttp.ClientTimeout(total=10)
+RETRY_WAITS = (1, 2)
+# LOVD's answer, instead of a list of variants, for a gene it doesn't have
+GENE_NOT_FOUND = "This gene does not exist."
 SUMMARY_TABLE_TEMPLATE = """
 <table class='table caption-top'>
     <caption>{{ entries }} entries - {{ vkgl_entries }} VKGL-NL</caption>
@@ -59,7 +68,20 @@ class LOVD(Source):
         enc_cdot = urllib.parse.quote(cdot)
         gene_url = f"https://databases.lovd.nl/shared/variants/{enc_gene}/unique"
         query_url = f"https://databases.lovd.nl/shared/api/rest.php/variants/{enc_gene}?search_position={enc_cdot}&show_variant_effect=1&format=application/json"
-        _, json = await self._lovd_get_json(query_url)
+        try:
+            json = await self._lovd_get_json(query_url)
+        except (asyncio.TimeoutError, aiohttp.ClientError, ValueError) as e:
+            # the link to the gene works without the answer
+            self.log_warning(f"LOVD did not answer after {len(RETRY_WAITS) + 1} tries: {type(e).__name__}: {e}")
+            self.timeout = True
+            self.html_text = "LOVD did not answer. Search again, or look the variant up on the gene page."
+            self.html_links["gene"] = SourceURL("Gene", gene_url)
+            return
+        # a gene that is not in LOVD is answered right away, there is nothing to link to
+        if isinstance(json, str) and json.strip() == GENE_NOT_FOUND:
+            self.html_text = f"{gene} is not in LOVD"
+            self.found = False
+            return
         if isinstance(json, str):
             self.html_text = f"Variant not found. LOVD reports the following: {json}"
             self.found = False
@@ -104,27 +126,42 @@ class LOVD(Source):
             entries=row_count,
         )
 
-    async def _lovd_get_json(
-        self, url: str
-    ) -> tuple[ClientResponse, dict[str, object] | list[object]]:
+    async def _lovd_get_json(self, url: str) -> dict[str, object] | list[object]:
+        """
+        Returns the answer of LOVD. A request that fails (no answer in time, server error) is tried again, see RETRY_WAITS.
+        """
+        error: Exception = ValueError("no answer")
+        for wait in (0, *RETRY_WAITS):
+            await asyncio.sleep(wait)
+            try:
+                return await self._lovd_request(url)
+            except (asyncio.TimeoutError, aiohttp.ClientError, ValueError) as e:
+                error = e
+                self.log_info(f"LOVD try failed: {type(e).__name__}: {e}")
+        raise error
+
+    async def _lovd_request(self, url: str) -> dict[str, object] | list[object]:
         """LOVD url's contain a js redirect for access validation.
 
         The request returns HTML and sets cookie headers. Afterwards it expects a
         reload of the page with '&ncr' appended to the url
         """
-        session = self.session
-
-        async with session.get(url) as resp:
+        async with self.session.get(url, timeout=LOVD_TIMEOUT) as resp:
             ctype = resp.headers.get("Content-Type", "")
             body = await resp.text()
+            if resp.status >= 500:
+                raise aiohttp.ClientError(f"LOVD server error {resp.status}")
 
+        # a variant that is not in LOVD is a 404 with an empty list, a gene that is not in LOVD a 404 with a sentence
+        if body.strip() == GENE_NOT_FOUND:
+            return GENE_NOT_FOUND
         if "json" in ctype:
-            return resp, json.loads(body)
+            return json.loads(body)
 
         if _LOVD_BOT_PROTECTION_RE.search(body):
-            retry_url = url + "&ncr"
-            async with session.get(retry_url) as resp2:
-                data = await resp2.json()
-            return resp2, data
+            async with self.session.get(url + "&ncr", timeout=LOVD_TIMEOUT) as resp2:
+                if resp2.status >= 500:
+                    raise aiohttp.ClientError(f"LOVD server error {resp2.status}")
+                return await resp2.json(content_type=None)
 
         raise ValueError(f"Unexpected LOVD response ({ctype}): {body[:200]}")
