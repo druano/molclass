@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     ]
 
     # the width of a source on the page in twelfths of the page, a source that is not listed gets 4 (a third).
-    # A stack has the width of its first source
+    # A stack has the width of the first source in its list, also when that source is switched off
     source_widths: dict = {
         "GenomeNexus": 6,
         "InHouse": 3,

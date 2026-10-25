@@ -48,7 +48,14 @@ def search(request: Request, search: str):
             "search": search,
             "release_tag": settings.release_tag,
             "sources": (sources := [source({}, {}) for source in settings.sources]),
-            "stacks": [[source for stacked in stack for source in sources if type(source) is stacked] for stack in settings.stacked_sources],
+            # a stack keeps its width when its first source is switched off, so the columns still fill the row
+            "stacks": [
+                {
+                    "sources": [source for stacked in stack for source in sources if type(source) is stacked],
+                    "width": settings.source_widths.get(stack[0].__name__, 4),
+                }
+                for stack in settings.stacked_sources
+            ],
             "source_widths": settings.source_widths,
             # the Links card is shown at the place of the first source that is only a link
             "links_anchor": next((source for source in sources if source.is_link()), None),
