@@ -25,6 +25,16 @@ ONCOGENIC_CLASSIFICATIONS = {
     "Benign": "Benign",
 }
 
+# the (germline) ACMG classification of Franklin, with a color from green (benign) to red (pathogenic)
+ACMG_CLASSIFICATIONS = {
+    "Benign": ("Benign", "#2e8b3a"),
+    "LikelyBenign": ("Likely benign", "#4b9f4b"),
+    "VUS": ("Uncertain significance", "#d9822b"),
+    "Uncertain": ("Uncertain significance", "#d9822b"),
+    "LikelyPathogenic": ("Likely pathogenic", "#e8590c"),
+    "Pathogenic": ("Pathogenic", "#d62828"),
+}
+
 
 class Franklin(Source):
     def set_entries(self):
@@ -98,14 +108,20 @@ class Franklin(Source):
         )
         return {"tier": tier, "oncogenic": oncogenic}
 
-    def get_somatic_html(self, somatic: dict) -> str:
+    def get_somatic_html(self, somatic: dict, acmg: str | None = None) -> str:
+        """
+        The somatic tier, the oncogenicity and the (germline) ACMG classification of Franklin, one per line
+        """
         lines = []
         if somatic.get("tier") in SOMATIC_TIERS:
             name, meaning, color = SOMATIC_TIERS[somatic["tier"]]
             lines.append(f"<b style='color: {color}'>{name}</b> {meaning}")
         if somatic.get("oncogenic") in ONCOGENIC_CLASSIFICATIONS:
             lines.append(f"<span class='small'>Oncogenicity: {ONCOGENIC_CLASSIFICATIONS[somatic['oncogenic']]}</span>")
-        return "<br />".join(lines) or "No somatic classification"
+        if acmg in ACMG_CLASSIFICATIONS:
+            name, color = ACMG_CLASSIFICATIONS[acmg]
+            lines.append(f"<span class='small'>Pathogenicity (ACMG): <b style='color: {color}'>{name}</b></span>")
+        return "<br />".join(lines) or "No classification"
 
     def get_classification_color(self, classification):
         """
@@ -176,7 +192,7 @@ class Franklin(Source):
             if "gene" in franklin_variant_detail:
                 self.new_variant_data["gene"] = franklin_variant_detail["gene"]
 
-            # the (ACMG) classification is not shown, but it has the gene, cdot and pdot of the variant
+            # the (ACMG) classification also has the gene, cdot and pdot of the variant
             classification_json, somatic = await asyncio.gather(
                 self.get_classification_response(chrom, pos, ref, alt),
                 self.get_somatic_classification(chrom, pos, ref, alt),
@@ -207,7 +223,7 @@ class Franklin(Source):
 
             url = f"https://franklin.genoox.com/clinical-db/variant/snp/{chrom}-{pos}-{ref}-{alt}?app=publications"
             self.html_links["main"] = SourceURL("Publications", url)
-            self.html_text = self.get_somatic_html(somatic)
+            self.html_text = self.get_somatic_html(somatic, franklin_classification)
         else:
             self.complete = False
             self.html_text = "Not found"
