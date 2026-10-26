@@ -23,6 +23,23 @@ router = APIRouter(
     tags=["root"],
 )
 
+def get_stacks(sources: list) -> list[dict]:
+    """
+    The stacks of sources on the page, with the sources of each stack that are switched on.
+    A stack keeps the place and the width of the first source in its list in the config, also when that source
+    is switched off: it is put before the first source that is switched on and comes at or after that place.
+    """
+    order = {source: index for index, source in enumerate(settings.configured_sources)}
+    stacks = []
+    for stack in settings.stacked_sources:
+        members = [source for stacked in stack for source in sources if type(source) is stacked]
+        place = order.get(stack[0], 0)
+        anchor = next((source for source in sources if order.get(type(source), 0) >= place), None)
+        if members and anchor:
+            stacks.append({"sources": members, "anchor": anchor, "width": settings.source_widths.get(stack[0].__name__, 4)})
+    return stacks
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(
@@ -48,14 +65,7 @@ def search(request: Request, search: str):
             "search": search,
             "release_tag": settings.release_tag,
             "sources": (sources := [source({}, {}) for source in settings.sources]),
-            # a stack keeps its width when its first source is switched off, so the columns still fill the row
-            "stacks": [
-                {
-                    "sources": [source for stacked in stack for source in sources if type(source) is stacked],
-                    "width": settings.source_widths.get(stack[0].__name__, 4),
-                }
-                for stack in settings.stacked_sources
-            ],
+            "stacks": get_stacks(sources),
             "source_widths": settings.source_widths,
             # the Links card is shown at the place of the first source that is only a link
             "links_anchor": next((source for source in sources if source.is_link()), None),

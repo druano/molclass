@@ -66,8 +66,12 @@ class Settings(BaseSettings):
         "BoostDM",
     ]
 
+    # all the sources above, also the ones that are switched off, so a stack keeps its place on the page
+    configured_sources: List[type] = []
+
     def __init__(self):
         super().__init__()
+        self.configured_sources = list(self.sources)
         disabled_sources_list = self.disabled_sources.split(",")
         self.sources = [
             source

@@ -145,23 +145,21 @@
         {% endif %}
     {% endmacro %}
     <div class="row row-cols-1 row-cols-md-3 g-2">
-        {% set shown = namespace(stacks=[], stack=none) %}
+        {% set shown = namespace(stacked=false) %}
         {% for source in sources %}
-            {% set shown.stack = none %}
-            {% for stack in stacks %}{% if source in stack.sources %}{% set shown.stack = stack %}{% endif %}{% endfor %}
-            {% if shown.stack %}
-                {# the sources of a stack share one column, they are all put at the place of the first of them #}
-                {% if shown.stack.sources[0].__class__.__name__ not in shown.stacks %}
-                    {% set shown.stacks = shown.stacks + [shown.stack.sources[0].__class__.__name__] %}
-                    <div class="col col-md-{{ shown.stack.width }}">
-                        <div class="d-flex flex-column gap-2 h-100">
-                            {% for stacked_source in shown.stack.sources %}
-                                {{ source_slot(stacked_source, "flex-fill") }}
-                            {% endfor %}
-                        </div>
+            {# the sources of a stack share one column, it is put at the place of the stack in the config #}
+            {% for stack in stacks if stack.anchor is sameas source %}
+                <div class="col col-md-{{ stack.width }}">
+                    <div class="d-flex flex-column gap-2 h-100">
+                        {% for stacked_source in stack.sources %}
+                            {{ source_slot(stacked_source, "flex-fill") }}
+                        {% endfor %}
                     </div>
-                {% endif %}
-            {% else %}
+                </div>
+            {% endfor %}
+            {% set shown.stacked = false %}
+            {% for stack in stacks if source in stack.sources %}{% set shown.stacked = true %}{% endfor %}
+            {% if not shown.stacked %}
                 {{ source_slot(source, "col col-md-" ~ source_widths.get(source.__class__.__name__, 4)) }}
             {% endif %}
         {% endfor %}
