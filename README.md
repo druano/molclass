@@ -1,256 +1,100 @@
+<p align="right">
+  <a href="https://www.erasmusmc.nl/"><img src="static/logos/Erasmus%20MC.png" alt="Erasmus MC" height="40"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://www.lumc.nl/"><img src="static/logos/LUMC.svg" alt="Leiden University Medical Center" height="34"></a>
+</p>
+
 # Molclass
 
-Moleculair classification tool, enter your search query, and results from multiple sources (dbSNP, Franklin, Clinvar, etc) will be aggregated.
+**One search for everything you need to classify a variant detected in tumour DNA**
 
-Molclass is available as a Docker container:  
-`docker run -p 8080:8080 ghcr.io/erasmusmc-bioinformatics/molclass:latest`  
+<img src="docs/screenshot.png" alt="Molclass showing the results for EGFR c.2573T>G (p.L858R)" width="900">
 
-And connect to Molclass on [http://127.0.0.1:8080](http://127.0.0.1:8080).
+---
 
-## HMF
+## What is Molclass
 
-The [Hartwig Medical Foundation](https://www.hartwigmedicalfoundation.nl/en/) has a curated list of variants that can be used as a source, to enable it set the path to the database file with the `HMF_DATABASE` environment variable, for example with Docker:  
-```
-docker run \
-    -p 8080:8080 \
-    -v /host/path/to/hmf_hotspots.tsv:/databases/hmf_hotspots.tsv \
-    -e HMF_DATABASE=/databases/hmf_hotspots.tsv \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
+A variant detected when tumour DNA is analysed can be somatic or of germline origin. Either way, classifying it means visiting many databases and typing the same variant into each of them. Molclass does that round for you. Enter a variant once, and it collects what the main sources say about it and shows the answers side by side: what is known about the gene and the position, how often the variant is seen and in which tumour types, how other databases interpret it, and where to read further.
 
-## OncoKB
+Molclass also shows whether one of the participating centres has classified the variant before, and how. That earlier classification is there to support your own assessment, not to replace it: it is one more piece of evidence to weigh, and a reason to look again when it differs from your own conclusion.
 
-[OncoKB](https://www.oncokb.org) can be used as a source if you have an API key, it can be found under your [account settings](https://www.oncokb.org/account/settings).  
-The OncoKB API key can be added through the `ONCOKB_API_KEY` environment variable, for example with Docker:  
-```
-docker run \
-    -p 8080:8080 \
-    -e ONCOKB_API_KEY=<api-key> \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-## Alamut
+<img src="docs/disclaimer.svg" alt="Molclass brings information together; it does not classify. The sources can be incomplete or disagree with each other, and the interpretation of a variant remains the responsibility of the specialist who reports it." width="900">
 
-Molclass can also connect to the Alamut API, this requires a computer running the Alamut client that Molclass can query.  
-For Molclass to connect to this Alamut client, 3 environment variable need to be set:  
-- `ALAMUT_IP`: the IP address of the machine running the Alamut client
-- `ALAMUT_INSTITUTION`: Your institution ID
-- `ALAMUT_API_KEY`: Your API key
+## Two ways to take part
 
-For example with Docker:  
-```
-docker run \
-    -p 8080:8080 \
-    -e ALAMUT_IP=127.0.0.1 \
-    -e ALAMUT_INSTITUTION=<institution-id> \
-    -e ALAMUT_API_KEY=<api-key> \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-
-## Cosmic
-
-To use Cosmic, the Mutant Census database must be downloaded and configured.
-The database can be downloaded [https://cancer.sanger.ac.uk/cosmic/download] if you have an account, from the "Census Genes Mutations" section, then set the `COSMIC_DATABASE` environment variable to the path of the downloaded file, for example with Docker: 
-```
-docker run \
-    -p 8080:8080 \
-    -v /host/path/to/Cosmic_MutantCensus_v98_GRCh37.tsv.gz:/databases/Cosmic_MutantCensus_v98_GRCh37.tsv.gz \
-    -e COSMIC_DATABASE=/databases/Cosmic_MutantCensus_v98_GRCh37.tsv.gz \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-
-## Custom gene lists
-
-To use custom gene lists, create a YAML file describing the lists:
-
-```yml
-- name: Sonic
-  message: This gene is named after a videogame character.
-  url: https://en.wikipedia.org/wiki/Sonic_the_Hedgehog
-  genes:
-    - SHH
-```
-
-Then set the `GENE_LISTS` environment variable to the path of this YAML file, for example with Docker:
-
-```
-docker run \
-    -p 8080:8080 \
-    -v ./gene_lists.yml:/databases/gene_lists.yml \
-    -e GENE_LISTS=/databases/gene_lists.yml \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-
-## Previously classified (EMC / LUMC)
-
-Shows if a variant has already been classified at the EMC and/or LUMC, and how.
-The classifications are read from a sqlite database, set the `INHOUSE_DATABASE` environment variable to its path (default: `databases/inhouse.db`), for example with Docker:
-
-```
-docker run \
-    -p 8080:8080 \
-    -v /host/path/to/inhouse.db:/databases/inhouse.db \
-    -e INHOUSE_DATABASE=/databases/inhouse.db \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-
-The database can be replaced while Molclass is running, the new one is used from the next search on.
-The card shows the date the database was made.
-
-Variants are stored and compared by their hg19 genomic position (chr, pos, ref, alt), because not every center reports a transcript, or the same one.
-A searched `transcript:cdot` is converted to hg19 with Mutalyzer or Ensembl VEP (see [Genomic coordinates](#genomic-coordinates)).
-Deletions and insertions are left aligned on the reference sequence (from Ensembl) before they are compared, so it doesn't matter where in a repeat a center reports them.
-
-The database has three tables, see `inhouse_db.py` for the notation of pos, ref and alt:
-
-| Table | Columns |
+| 🖥️ Run Molclass at your centre | 🤝 Share your classifications |
 |---|---|
-| `metadata` | `key`, `value`, with the date the database was made (`2026-10-10`) under the key `built` |
-| `centers` | `name`, `source_file`, `variants` |
-| `classifications` | `center`, `gene`, `chr`, `pos`, `ref`, `alt`, `classification`, with an index on (`chr`, `pos`) |
+| Get the code and run Molclass on your own server: you choose which sources to show and add your own data files. Nothing leaves your centre. | Join the Erasmus MC and the LUMC in sharing variant classifications. Your classifications would be shown on the *Previously classified* card next to those of the Erasmus MC and the LUMC, so we can learn from each other's assessments. |
+| **[How to run it ↓](#run-molclass-at-your-centre)** | **[How to join ↓](#share-your-classifications)** |
 
-## AlphaGenome
+## Run Molclass at your centre
 
-Shows the AlphaGenome Variant Impact (AVI) score of the variant from the [AlphaGenome Atlas](https://deepmind.google.com/science/alphagenome/atlas): where the score is in the distribution of all variants, and the two features that contribute most to it.
-This needs an API key, add it through the `ALPHAGENOME_API_KEY` environment variable, for example with Docker:
-```
-docker run     -p 8080:8080     -e ALPHAGENOME_API_KEY=<api-key>     ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-The Atlas only has scores for substitutions of a single base. AlphaGenome only supports GRCh38, the hg38 position of the variant is looked up for it (see [Genomic coordinates](#genomic-coordinates)).
+### Quick start
 
-## Tabel 3
+You need [Docker](https://docs.docker.com/get-docker/).
 
-Shows the advice of "Tabel 3" of the NVVP, VKGL and VKGN for the gene: when a (likely) pathogenic variant found in a tumor is a reason to advise germline diagnostics, in the pathology report and in the MTB.
-The table is published as a pdf, so it has to be typed over into a YAML file:
-
-```yml
-version: april 2026
-url: "https://artsengenetica.nl/sites/default/files/Versie%20tabel%203%20maart%202026.pdf"
-columns:
-  report: Attenderen op mogelijke kiembaanvariant in PA-verslag indien sprake is van onderstaande tumor/beeld
-  mtb: Aanvullende redenen om te overwegen te verwijzen voor klinische genetische counseling
-notes:
-  - Alleen indien TMB < 20 mut/Mb.
-genes:
-  ATM:
-    report: Pancreas- of mammacarcinoom
-    mtb: Bij pancreas- of mammacarcinoom bij patiënt of bij 1e gr verwant
-  BRCA1:
-    report: Altijd
-  RET:
-    changed: true
-    remark: N.B. RET fusies zijn geen reden voor kiembaanonderzoek
-    report: |-
-      Codon 918 nooit
-      Codon 634 en 833 bij elk tumortype
-```
-
-`report` and `mtb` are the two columns of the table, `changed` marks a text that was changed since the previous version and `remark` is shown above the advice. The `columns` and `notes` are shown when hovering over the card.
-Set the `TABLE3_DATABASE` environment variable to the path of this file (default: `databases/table3.yml`), for example with Docker:
-
-```
-docker run     -p 8080:8080     -v ./table3.yml:/databases/table3.yml     -e TABLE3_DATABASE=/databases/table3.yml     ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-
-## Logos
-
-Every image (svg, png, jpg, webp or gif) in `static/logos` is shown at the bottom of the page, in alphabetical order.
-The name of the file without the extension is used as the description of the image, so `Erasmus MC.svg` and `LUMC.svg` work well.
-With Docker the folder can be mounted: `-v /host/path/to/logos:/app/static/logos`.
-
-## Disabling sources
-
-Specific sources can be disabled by setting the `DISABLED_SOURCES` environment variable as a comma-separated list.
-The values included in this list should be the class names of the sources to disable (see config.py for the list of
-available sources).
-
-```
-docker run \
-    -p 8080:8080 \
-    -v ./gene_lists.yml:/databases/gene_lists.yml \
-    -e DISABLED_SOURCES=Alamut,LOVD \
-    ghcr.io/erasmusmc-bioinformatics/molclass:latest
-```
-
-# Production
-
-On every new release a Github action will trigger a new Docker build for `ghcr.io/erasmusmc-bioinformatics/molclass`.  
-The production environment uses this image in `docker-compose.yml` to run the Molclass production server.  
-The production Molclass server is running at CIT, first ssh to the jumpoff server, `creig.erasmusmc.nl`, then ssh to `p-molclass01`.
-Execute a `docker-compose pull` to pull the newly released image and then `docker-compose up -d --build` to restart the service with the updated release image.
-
-## SSL certificate update
-
-Make a copy of the old cert/key:  
 ```bash
-cp /etc/nginx/certs/bifrost.erasmusmc.nl.crt /etc/nginx/certs/bifrost.erasmusmc.nl.crt.2023.old
-cp /etc/nginx/certs/bifrost.erasmusmc.nl.key /etc/nginx/certs/bifrost.erasmusmc.nl.key.2023.old
+git clone https://github.com/ErasmusMC-Bioinformatics/molclass.git
+cd molclass
+docker build -t molclass .
+docker run -p 8080:8080 molclass
 ```
 
-Overwrite with the new cert/key:  
+Open <http://127.0.0.1:8080> and search for a variant. This works without any configuration, with the public sources. The cards that need a licence, an API key or a data file are switched on as described under [Configuration](#configuration).
+
+### How to search
+
+| Notation | Example |
+|---|---|
+| Transcript and coding change | `NM_005228.5:c.2573T>G` |
+| Gene and coding change | `EGFR:c.2573T>G` |
+| Genomic position (hg19) | `chr7:55259515:T:G` |
+| dbSNP identifier | `rs121434568` |
+
+The results appear as cards, each from one source, and fill in as the sources answer. The buttons at the bottom of a card open that source at the variant.
+
+### Configuration
+
+Everything is configured with environment variables, for example in an env file passed with `docker run --env-file molclass.env`. Data files are mounted into the container with `-v`.
+
+| Card (in the order on the page) | What you need | Setting |
+|---|---|---|
+| Tabel 3 (NVVP/VKGL/VKGN) | The table typed over into YAML | `TABLE3_DATABASE` |
+| Previously classified | A database of your classifications | `INHOUSE_DATABASE` |
+| AlphaGenome | AlphaGenome API key (research use only) | `ALPHAGENOME_API_KEY` |
+| Gene lists | Your own gene lists in YAML | `GENE_LISTS` |
+| Alamut | Alamut Visual Plus with an API licence | `ALAMUT_IP`, `ALAMUT_INSTITUTION`, `ALAMUT_API_KEY` |
+| COSMIC | Cancer Mutation Census file (COSMIC account) | `COSMIC_DATABASE` |
+| OncoKB | OncoKB API key | `ONCOKB_API_KEY` |
+| HMF hotspots | Hartwig known hotspots file | `HMF_DATABASE` |
+| Any card | Switch cards off | `DISABLED_SOURCES=Varsome,Mastermind` |
+
+The details of each setting, and the format of the data files, are in [docs/configuration.md](docs/configuration.md).
+
+## Share your classifications
+
+Molclass was started at the Erasmus MC and is now developed together with the Leiden University Medical Center (LUMC). Both centres use it in their molecular diagnostics and share their variant classifications through it.
+
+Other centres are welcome to join. The more centres take part, the more likely it is that a rare variant has been seen and classified before. And when centres reach different conclusions about a variant, that is a reason for all of them to take another look.
+
+- **What is shared:** for each classified variant only the gene, the chromosome position, the change and the classification. No patient data.
+- **How it works:** at the moment the Erasmus MC and the LUMC export their classified variants and combine them into one database. If other centres are interested, we will explore together the best way forward, probably a central Molclass server that shows the classifications of all participating centres.
+- **To join:** open an [issue](https://github.com/ErasmusMC-Bioinformatics/molclass/issues), and we'll agree on the details together.
+
+## Development
+
+Molclass is a [FastAPI](https://fastapi.tiangolo.com/) application; every source is a small Python class in [`sources/`](sources/). How the sources work together, and how to add one, is described in [docs/development.md](docs/development.md); how the Erasmus MC runs it in production in [docs/production.md](docs/production.md).
+
 ```bash
-mv bifrost.erasmusmc.nl.crt /etc/nginx/certs/bifrost.erasmusmc.nl.crt
-mv bifrost.erasmusmc.nl.key /etc/nginx/certs/bifrost.erasmusmc.nl.key
+pip install -r requirements/requirements.txt
+uvicorn main:app --reload --port 8585
 ```
 
-Restart the httpproxy docker:  
-```bash
-docker restart httpproxy
-```
+---
 
-# Dev
-
-## Structure
-
-Molclass is a FastAPI webserver where, after an [initial page load](https://github.com/ErasmusMC-Bioinformatics/molclass/blob/a720b52c56ea0ac707ac9e3ea0eda34134e5f6dd/router.py#L33), the client [connects back](https://github.com/ErasmusMC-Bioinformatics/molclass/blob/a720b52c56ea0ac707ac9e3ea0eda34134e5f6dd/static/molclass.ts#L6) to the webserver to a [websocket](https://github.com/ErasmusMC-Bioinformatics/molclass/blob/a720b52c56ea0ac707ac9e3ea0eda34134e5f6dd/router.py#L129) to allow for asynchronous querying/updating of sources.  
-
-[Sources define](https://github.com/ErasmusMC-Bioinformatics/molclass/blob/a720b52c56ea0ac707ac9e3ea0eda34134e5f6dd/sources/source_result.py#L64) what meta data they need to be able to complete a request and Molclass will iteratively call sources as more meta data becomes available.  
-
-Each source adds the meta data it gets to the pool of available meta data.  
-It is possible that sources return different meta data.
-For example, searching [NM_000267.3:c.5286T>A](http://molclass.erasmusmc.nl/search?search=NM_000267.3%3Ac.5286T%3EA) where Clingen and Franklin both prefer `NM_001042492.3:c.5349T>A`.  
-The meta data in the search always has precedence over the sources, but in other cases Molclass counts how many sources agree and picks the majority.
-### Simple search example
-If only the [dbSNP](https://github.com/ErasmusMC-Bioinformatics/molclass/blob/a720b52c56ea0ac707ac9e3ea0eda34134e5f6dd/sources/dbsnp.py#L45) and [Clingen](https://github.com/ErasmusMC-Bioinformatics/molclass/blob/a720b52c56ea0ac707ac9e3ea0eda34134e5f6dd/sources/clingen.py#L13C10-L13C10) sources were active and the user searched for `rs1057519915`, Molclass would:  
-
-In the first iteration only query dbSNP because Molclass only has an `rs#`.  
-It adds the `transcript` (`NM_004958.4`) and `cdot` (`c.7500T>G`) to the meta data pool (+other meta data)
-
-In the second iteration Molclass can now call `Clingen` with the `transcript`/`cdot` values it got from the first iteration.
-
-The third iteration Molclass will see that there are no more sources left, and end the iteration.
-
-### Genomic coordinates
-
-Sources that need the genomic position of a `transcript:cdot` should not look it up themselves, but call `await self.resolve_coordinates()` (optionally with `build="GRCh38"`).
-This uses Mutalyzer, and Ensembl VEP for what Mutalyzer can't map, and returns the chromosome, position, ref and alt as in a vcf, on the forward strand.
-A variant is only looked up once, also when several sources ask for it in the same iteration, and the result is cached.
-
-These services fail now and then, so a request that fails is tried again (see `RETRY_WAITS` in `coordinates.py`) and there are two services for everything:
-Mutalyzer also maps positions in an intron, the bases of a deletion/insertion can be taken from the reference genome when Ensembl VEP has no answer, and the reference genome comes from Ensembl or UCSC.
-
-The gene, protein change and genomic positions at the top of the page come from the sources.
-If none of the sources had one of them at the end of a search, it is looked up with Mutalyzer (`complete_variant` in `router.py`), so they are always shown for a `transcript:cdot`.
-A protein change that is not known is shown as `p.?`.
-
-`await self.resolve_gdot()` only returns the hgvs genomic notation, which is faster for deletions and insertions.
-
-In the same way `await self.resolve_gene()` returns the gene of the searched transcript, for a source that only needs the gene and should not have to wait for another source to add it to the meta data.
-
-The result is also added to the meta data as `gdot`, `g_chr`, `g_pos`, `g_ref` and `g_alt` (`gdot38`, `g38_chr`, ... for GRCh38), `gdot` and `gdot38` are shown at the top of the page.
-The older `ref` and `alt` meta data are the bases of the cdot, so for a gene on the reverse strand they are not the genomic bases.
-
-## Uvicorn start
-
-`uvicorn main:app --reload --port 8585 --host 0.0.0.0`
-
-## Typescript compile
-
-`tsc static/molclass.ts --outfile static/molclass.js --watch --lib 'es2020,dom'`
-
-## Build PyInstaller
-
-Activate the venv:  
-`env/Scripts/Activate.ps1`
-
-And run: 
-`pyinstaller --clean molclass.spec`
+<p>
+  <sub>DEVELOPED BY</sub><br><br>
+  <a href="https://www.erasmusmc.nl/"><img src="static/logos/Erasmus%20MC.png" alt="Erasmus MC" height="56"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://www.lumc.nl/"><img src="static/logos/LUMC.svg" alt="Leiden University Medical Center" height="48"></a>
+</p>
